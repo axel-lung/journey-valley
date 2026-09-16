@@ -49,6 +49,18 @@ Copy `.env.example` to `.env` if you want to change the defaults:
 
 - `DATABASE_PATH` — where the SQLite file lives (default `./data/journey-valley.db`).
 
+## On Android
+
+There is a standalone APK too — the same trips, budgets, agency comparison and cost splitting,
+running entirely on the phone with no account and no network:
+
+```bash
+npm run apk      # → mobile/dist/journey-valley.apk
+```
+
+It shares the domain logic with this app rather than reimplementing it. See
+[`mobile/README.md`](mobile/README.md) for what it does and does not do.
+
 ## Checks
 
 ```bash
@@ -56,6 +68,7 @@ npm test         # unit tests for the money, budget, savings, split and stage lo
 npm run typecheck
 npm run build
 npm run smoke    # end-to-end: signup → trip → booking → expense → plan limit → settle up
+npm run apk:test # the Android bundle, driven in a phone-sized browser
 ```
 
 `npm run smoke` boots the production build against a throwaway database and drives a real

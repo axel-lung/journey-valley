@@ -15,3 +15,6 @@ data/*.db-shm
 
 .DS_Store
 coverage/
+
+mobile/dist/
+mobile/debug.keystore
