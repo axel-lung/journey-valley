@@ -42,7 +42,8 @@ export function evaluateWatch(
   watch: Pick<PriceWatch, "target_cents" | "last_price_cents">,
   results: SearchResult[],
 ): WatchEvaluation {
-  const priced = results.filter((result) => result.price_cents > 0);
+  // A result with no known price cannot be watched: there is nothing to compare.
+  const priced = results.filter((result) => result.price_known && result.price_cents > 0);
   if (priced.length === 0) {
     return {
       best: null,

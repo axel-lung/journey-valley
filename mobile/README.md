@@ -1,7 +1,8 @@
 # Journey Valley for Android
 
-A standalone APK, in French: the trips, budgets, checklists, agency comparison and cost splitting
-from the web app, running entirely on the phone. No account, no server, no network permission —
+A standalone APK, in French: the trips, budgets, checklists, day-by-day programme, the practical
+page for the destination, the agency comparison and cost splitting — running entirely on the
+phone. No account, no server, no network permission —
 the app ships with no `<uses-permission>` at all.
 
 ## Install it
@@ -64,6 +65,9 @@ group chat.
 This build is one device, one traveller. That means:
 
 - **No accounts and no sign-in.** Nothing to log into, nothing sent anywhere.
+- **No search and no destination file.** Those need the network, and this build declares no
+  network permission. What survives offline — the programme, the practical page, the package
+  estimate — is here, which is what you want abroad.
 - **Companions are names you type**, not people with logins. Splitting and settling work exactly
   as they do on the web — the names just are not linked to anyone.
 - **No plans.** Free and Plus are a subscription concern; there is nothing to enforce offline.

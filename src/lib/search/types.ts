@@ -24,6 +24,12 @@ export interface SearchResult {
   end_at: string | null;
   nights: number | null;
   price_cents: number;
+  /**
+   * False when the provider knows the place but not what it costs — a museum
+   * from OpenStreetMap, say. The interface asks for the price instead of
+   * inventing one, and price alerts ignore these.
+   */
+  price_known: boolean;
   currency: string;
   /** What the same component tends to cost inside a package — an estimate. */
   package_price_cents: number;

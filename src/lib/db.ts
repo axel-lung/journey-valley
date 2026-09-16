@@ -150,6 +150,13 @@ export function migrate(db: Database.Database): void {
       checked_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS api_cache (
+      key        TEXT PRIMARY KEY,
+      payload    TEXT NOT NULL,
+      fetched_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS activity_log (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       trip_id    INTEGER REFERENCES trips(id) ON DELETE CASCADE,

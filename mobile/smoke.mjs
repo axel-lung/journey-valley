@@ -79,7 +79,7 @@ try {
   await page.locator('input[name="description"]').fill("Billets de ferry");
   await page.getByRole("button", { name: "Ajouter la dépense" }).click();
   await page.waitForSelector("text=Billets de ferry");
-  check("the expense is saved", await page.getByText("Billets de ferry").isVisible());
+  check("the expense is saved", await page.getByText("Billets de ferry").first().isVisible());
   check("the split is recalculated", await page.getByText(/doit 59\s€/).first().isVisible());
 
   // 4b. The preparation checklist.
@@ -94,11 +94,25 @@ try {
     await page.getByRole("button", { name: "Décocher Cartes hors-ligne téléchargées" }).isVisible(),
   );
 
+  // 4c. The offline travel file: day by day, and what to do in an emergency.
+  check(
+    "the day-by-day programme is built offline",
+    await page.getByText("Jour 1").first().isVisible(),
+  );
+  check(
+    "the practical sheet is available with no network",
+    await page.getByText("En cas de pépin").isVisible(),
+  );
+  check(
+    "the practical sheet knows the country",
+    await page.getByText("NOK").first().isVisible(),
+  );
+
   // 5. It survives a restart — which is the whole point of the storage layer.
   await page.reload();
   await page.waitForSelector("text=Road trip dans les fjords norvégiens");
   await page.getByText("Road trip dans les fjords norvégiens").click();
-  check("data survives a restart", await page.getByText("Billets de ferry").isVisible());
+  check("data survives a restart", await page.getByText("Billets de ferry").first().isVisible());
 
   // 5b. An expense can be split between only some of the travellers.
   await page.getByRole("button", { name: "Noter une dépense" }).click();

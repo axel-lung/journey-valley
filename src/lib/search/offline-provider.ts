@@ -83,7 +83,10 @@ function queryKey(query: SearchQuery): string {
 function build(
   query: SearchQuery,
   index: number,
-  fields: Omit<SearchResult, "id" | "kind" | "source" | "currency" | "package_price_cents">,
+  fields: Omit<
+    SearchResult,
+    "id" | "kind" | "source" | "currency" | "package_price_cents" | "price_known"
+  >,
 ): SearchResult {
   return {
     id: `offline:${hash(`${queryKey(query)}#${index}`).toString(36)}`,
@@ -92,6 +95,8 @@ function build(
     currency: "EUR",
     package_price_cents: estimateComponentPackagePrice(query.kind, fields.price_cents),
     ...fields,
+    // These are computed figures, but they are figures: a watch can track them.
+    price_known: true,
   };
 }
 

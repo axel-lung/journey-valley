@@ -104,6 +104,7 @@ describe("evaluateWatch", () => {
     end_at: null,
     nights: null,
     price_cents: price,
+    price_known: true,
     currency: "EUR",
     package_price_cents: price * 1.1,
     source: "offline",

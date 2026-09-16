@@ -52,6 +52,9 @@ const server = spawn(join("node_modules", ".bin", "next"), ["start", "--port", S
     DATABASE_PATH: join(dataDir, "smoke.db"),
     NODE_ENV: "production",
     WATCH_CRON_SECRET: CRON_SECRET,
+    // The free services are volunteer-run and the sandbox has no egress: the
+    // test drives the offline path on purpose, and asserts it says so.
+    JV_DISABLE_LIVE_APIS: "1",
   },
   stdio: ["ignore", "pipe", "pipe"],
   detached: true,
@@ -233,6 +236,35 @@ try {
     sweep.ok && sweepBody.checked >= 1,
     JSON.stringify(sweepBody),
   );
+
+  // 5d. The destination file and the day-by-day programme.
+  check(
+    "the destination file is rendered",
+    await page.getByText("Oslo, en pratique").isVisible(),
+  );
+  check(
+    "the practical sheet works with no network at all",
+    await page.getByText(/Urgences/).first().isVisible(),
+  );
+  check(
+    "the day-by-day programme lists the trip's days",
+    await page.getByText("Jour 1").first().isVisible(),
+  );
+
+  // 5e. The printable travel book.
+  await page.getByRole("link", { name: "Carnet de voyage" }).click();
+  await page.waitForURL(/\/carnet$/);
+  check("the travel book opens", await page.getByText("Carnet de voyage").first().isVisible());
+  check(
+    "the travel book carries the bookings",
+    await page.getByText("Norwegian").first().isVisible(),
+  );
+  check(
+    "the travel book carries the emergency page",
+    await page.getByText("En cas de pépin").isVisible(),
+  );
+  await page.goBack();
+  await page.waitForURL(/\/trips\/\d+$/);
 
   // 6. The preparation checklist.
   await page.getByRole("button", { name: "Ajouter les essentiels" }).click();

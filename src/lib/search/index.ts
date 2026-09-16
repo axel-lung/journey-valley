@@ -1,5 +1,6 @@
 import { amadeusConfigured, amadeusProvider } from "./amadeus-provider";
 import { offlineProvider } from "./offline-provider";
+import { osmProvider } from "./osm-provider";
 import { SearchUnavailableError, type SearchKind, type SearchProvider, type SearchQuery, type SearchResult } from "./types";
 
 export type { SearchKind, SearchProvider, SearchQuery, SearchResult };
@@ -11,7 +12,12 @@ export { SearchUnavailableError };
  * needs to know which provider answered — every result carries its `source`.
  */
 export function providerFor(kind: SearchKind): SearchProvider {
+  // An escape hatch for tests and for running without any outbound network.
+  if (process.env.JV_DISABLE_LIVE_APIS === "1") return offlineProvider;
+
   if (amadeusConfigured() && amadeusProvider.supports(kind)) return amadeusProvider;
+  // OpenStreetMap needs no key at all, so activities get real places by default.
+  if (osmProvider.supports(kind)) return osmProvider;
   return offlineProvider;
 }
 

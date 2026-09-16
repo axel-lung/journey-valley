@@ -137,6 +137,7 @@ function toResult(query: SearchQuery, offer: AmadeusOffer, carriers: Record<stri
     end_at: query.end_date ?? null,
     nights: null,
     price_cents: priceCents,
+    price_known: true,
     currency: offer.price?.currency ?? "EUR",
     package_price_cents: estimateComponentPackagePrice("flight", priceCents),
   };

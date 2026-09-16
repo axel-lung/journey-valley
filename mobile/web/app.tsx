@@ -24,8 +24,14 @@ import {
   formatTravellers,
   initials,
 } from "../../src/lib/format";
+import { buildItinerary } from "../../src/lib/itinerary";
 import { formatMoney, parseAmountToCents, percentOf } from "../../src/lib/money";
 import { estimatePackagePrice } from "../../src/lib/package";
+import {
+  countryCodeFromName,
+  OFFICIAL_ADVICE_URL,
+  practicalFor,
+} from "../../src/lib/practical";
 import {
   availableStageActions,
   checkStageChange,
@@ -299,6 +305,10 @@ function TripScreen({
   const actions = availableStageActions(trip, "owner");
   const when = countdown(trip.start_date, trip.end_date);
   const packageEstimate = estimatePackagePrice(bookings);
+  const itinerary = buildItinerary(trip, bookings, expenses);
+  const practical = practicalFor(
+    countryCodeFromName(trip.destination_country) ?? trip.destination_country,
+  );
   const nameById = new Map(travellers.map((traveller) => [traveller.user_id, traveller.name]));
 
   const runAction = (action: StageAction) => {
@@ -496,6 +506,76 @@ function TripScreen({
               pas dans vos économies : pour ça, saisissez un vrai devis.
             </p>
           </div>
+        </Card>
+      )}
+
+      {(bookings.length > 0 || expenses.length > 0) && (
+        <Card title="Jour par jour">
+          <ol className="divide-y divide-stone-100">
+            {itinerary.days.map((day) => (
+              <li key={day.date} className="px-4 py-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold text-stone-900">
+                    Jour {day.day_number}
+                    <span className="ml-2 font-normal text-stone-500">{formatDate(day.date)}</span>
+                  </p>
+                  {day.total_cents > 0 && (
+                    <span className="text-sm tabular-nums text-stone-600">
+                      {formatMoney(day.total_cents, CURRENCY)}
+                    </span>
+                  )}
+                </div>
+                {day.starts.length === 0 && day.ongoing.length === 0 && day.expenses.length === 0 ? (
+                  <p className="mt-1 text-sm text-stone-400">Rien de prévu.</p>
+                ) : (
+                  <ul className="mt-1 space-y-1 text-sm text-stone-700">
+                    {day.starts.map((booking) => (
+                      <li key={`s${booking.id}`}>
+                        <strong className="font-medium">{booking.vendor}</strong>
+                        {booking.description ? ` — ${booking.description}` : ""}
+                      </li>
+                    ))}
+                    {day.ongoing.map((booking) => (
+                      <li key={`o${booking.id}`} className="text-xs text-stone-500">
+                        {booking.vendor} — en cours
+                      </li>
+                    ))}
+                    {day.expenses.map((expense) => (
+                      <li key={`e${expense.id}`} className="text-xs text-stone-500">
+                        {expense.description} · {formatMoney(expense.amount_cents, CURRENCY)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
+
+      {practical && (
+        <Card title="En cas de pépin">
+          <dl className="divide-y divide-stone-100 text-sm">
+            {[
+              ["Urgences", practical.emergency],
+              ["Monnaie", practical.currency],
+              ["Prises", `${practical.plugs} · ${practical.voltage}`],
+              ["On roule à", practical.drive],
+              ["Pourboire", practical.tipping],
+              ["Entrée", practical.entry],
+            ].map(([label, value]) => (
+              <div key={label} className="px-4 py-2.5">
+                <dt className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                  {label}
+                </dt>
+                <dd className="mt-0.5 text-stone-800">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="border-t border-stone-100 px-4 py-3 text-xs leading-relaxed text-stone-500">
+            Informations indicatives, disponibles sans réseau. Les conditions d'entrée changent :
+            vérifiez sur France Diplomatie ({OFFICIAL_ADVICE_URL}) avant de partir.
+          </p>
         </Card>
       )}
 

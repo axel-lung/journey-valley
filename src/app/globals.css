@@ -45,3 +45,34 @@ input[type="date"] {
     font-size: 16px;
   }
 }
+
+/* The travel book is meant to be printed: drop the shell, keep the paper. */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  aside,
+  header nav,
+  nav {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    color: #78716c;
+  }
+
+  .break-before-page {
+    break-before: page;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+}

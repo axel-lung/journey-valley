@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { SubmitButton } from "@/components/submit-button";
 import { SavingsBars } from "@/components/spend-chart";
 import { coverStyle } from "@/lib/cover";
@@ -48,6 +49,8 @@ import {
   removeCompanionAction,
 } from "../actions";
 import { BookingForm } from "./booking-form";
+import { DossierCard, DossierSkeleton } from "./dossier-card";
+import { ItineraryCard } from "./itinerary-card";
 import { Checklist } from "./checklist";
 import { CompanionForm } from "./companion-form";
 import { ExpenseForm } from "./expense-form";
@@ -185,6 +188,15 @@ export default async function TripPage({
       </header>
 
       <ErrorNotice message={error} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={`/trips/${trip.id}/carnet`} className={secondaryButtonClass}>
+          Carnet de voyage
+        </Link>
+        <span className="text-xs text-stone-500">
+          Tout le voyage sur une page, à imprimer ou à enregistrer en PDF.
+        </span>
+      </div>
 
       {actions.length > 0 && (
         <form action={changeStageAction} className="flex flex-wrap gap-2">
@@ -355,6 +367,18 @@ export default async function TripPage({
         watches={watches}
         currency={currency}
         liveProvider={searchProviderIsLive}
+      />
+
+      <Suspense fallback={<DossierSkeleton city={trip.destination_city} />}>
+        <DossierCard trip={trip} currency={currency} />
+      </Suspense>
+
+      <ItineraryCard
+        trip={trip}
+        bookings={bookings}
+        expenses={expenses}
+        currency={currency}
+        nameById={nameById}
       />
 
       <Checklist tripId={trip.id} items={checklist} editable={editable} />

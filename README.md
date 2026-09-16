@@ -28,6 +28,11 @@ The interface is in French; the code, comments and tests are in English.
   one tap. See *Search providers* below for what is and is not connected.
 - **Price alerts.** Watch a route or a stay, set the price you want to be told about, and let the
   scheduled sweep re-check it.
+- **A destination file**: what the weather does then, what a euro is worth there, what there is to
+  see, and the practical page — plugs, emergency number, which side of the road, entry rules.
+- **A day-by-day programme**, built from the bookings and expenses already on the trip.
+- **A printable travel book** — the file an agency hands over: programme, every booking with its
+  reference, the emergency page, the checklist and who owes what.
 - **An estimate of what the same trip would cost as a package**, from the usual industry margins —
   shown as an order of magnitude, deliberately kept out of the savings totals.
 - **A budget you can actually read** — committed vs. remaining, per traveller, with the overrun
@@ -65,6 +70,29 @@ Copy `.env.example` to `.env` if you want to change the defaults:
 - `DATABASE_PATH` — where the SQLite file lives (default `./data/journey-valley.db`).
 - `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET` / `AMADEUS_ENV` — live flight search.
 - `WATCH_CRON_SECRET` — shared secret for the scheduled price-watch sweep.
+
+## Free services
+
+Everything below needs no key, no account and no card. Each one is optional: when it cannot be
+reached the page says which section is missing rather than failing, and `JV_DISABLE_LIVE_APIS=1`
+turns the lot off (which is how the test suite runs).
+
+| What | Service | Cache |
+| --- | --- | --- |
+| Places and coordinates | Nominatim (OpenStreetMap) | 30 days |
+| Things to see | Overpass (OpenStreetMap) | 7 days |
+| Weather and seasonal normals | Open-Meteo | 6 h / 30 days |
+| Exchange rates | Frankfurter (ECB) | 12 h |
+| Destination write-up | Wikipedia REST | 30 days |
+
+These are volunteer-run. The app identifies itself with a `User-Agent` (override with
+`JV_USER_AGENT`), keeps one timeout, and caches every answer in SQLite — a stale entry is also
+what gets served when a service is down. The practical page (plugs, emergency numbers, entry
+rules) is curated in `src/lib/practical.ts` rather than fetched, so it works with no network at
+all, which is the situation you are in abroad.
+
+None of these could be reached from the machine this was built on, so the parsers are tested
+against recorded payloads rather than live calls.
 
 ## Search providers
 
@@ -147,12 +175,20 @@ src/
     api/watches/      the scheduled price-watch sweep
   components/         shared UI, nav, charts
   lib/                domain logic, database, auth
-    search/           provider interface, offline estimates, Amadeus adapter
+    search/           provider interface, offline estimates, Amadeus and OSM adapters
+    api/              the free services: geocoding, POIs, weather, rates, guide
 scripts/smoke.mjs     end-to-end browser test
 ```
 
 ## Known gaps
 
+- No free key-less API exists for flight or hotel prices; those need Amadeus (free tier, keyed).
+  OpenStreetMap gives real activities but no prices, so they import with the price left blank.
+- The live integrations (Nominatim, Overpass, Open-Meteo, Frankfurter, Wikipedia) have never run
+  against the real services from here — the sandbox has no outbound network. Their parsers are
+  covered by fixtures; the first live call is worth watching.
+- Entry and visa rules in the practical page are indicative and curated by hand; every screen
+  links to France Diplomatie, which is the authority.
 - The Amadeus adapter is unverified against the live service, and covers flights only: stays and
   activities always fall back to the offline estimates.
 - Price alerts notify inside the app only — they land in the trip's activity feed, not in an inbox.
