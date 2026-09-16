@@ -10,20 +10,30 @@ import { spawn } from "node:child_process";
 import { existsSync, globSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 
 /**
- * Prefer a Chromium that is already on the machine (CI images often ship one
- * whose build number does not match the installed Playwright).
- * `CHROMIUM_PATH` wins; otherwise fall back to Playwright's own download.
+ * Finds a Chromium already installed on the machine. `playwright-core` never
+ * downloads a browser, which keeps `npm install` small for people who only
+ * want to run the app — so the smoke test borrows the system one.
  */
 function chromiumLaunchOptions() {
   const candidates = [
     process.env.CHROMIUM_PATH,
     ...globSync("/opt/pw-browsers/chromium-*/chrome-linux/chrome"),
+    ...globSync(`${process.env.HOME ?? ""}/.cache/ms-playwright/chromium-*/chrome-linux/chrome`),
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   ].filter((candidate) => candidate && existsSync(candidate));
 
-  return candidates.length > 0 ? { executablePath: candidates[0] } : {};
+  if (candidates.length === 0) {
+    throw new Error(
+      "No Chromium found. Install one, or point CHROMIUM_PATH at a Chrome/Chromium binary.",
+    );
+  }
+  return { executablePath: candidates[0] };
 }
 
 const PORT = Number(process.env.SMOKE_PORT ?? 3111);
