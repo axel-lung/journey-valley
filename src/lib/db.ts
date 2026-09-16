@@ -126,6 +126,30 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS price_watches (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id          INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      kind             TEXT NOT NULL CHECK (kind IN ('flight','stay','activity')),
+      origin           TEXT,
+      destination      TEXT NOT NULL,
+      start_date       TEXT NOT NULL,
+      end_date         TEXT,
+      travellers       INTEGER NOT NULL DEFAULT 1,
+      target_cents     INTEGER NOT NULL DEFAULT 0,
+      last_price_cents INTEGER,
+      best_price_cents INTEGER,
+      last_checked_at  TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS price_points (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      watch_id   INTEGER NOT NULL REFERENCES price_watches(id) ON DELETE CASCADE,
+      price_cents INTEGER NOT NULL,
+      vendor     TEXT,
+      checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS activity_log (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       trip_id    INTEGER REFERENCES trips(id) ON DELETE CASCADE,
@@ -142,6 +166,8 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_activity_trip ON activity_log(trip_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_checklist_trip ON checklist_items(trip_id, position, id);
+    CREATE INDEX IF NOT EXISTS idx_watches_trip ON price_watches(trip_id);
+    CREATE INDEX IF NOT EXISTS idx_points_watch ON price_points(watch_id, checked_at DESC);
   `);
 
   // Columns added after the first release. `CREATE TABLE IF NOT EXISTS` leaves

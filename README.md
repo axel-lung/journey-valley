@@ -24,6 +24,12 @@ The interface is in French; the code, comments and tests are in English.
 - **Expenses split between the people they concern**, not always the whole group: the taxi three
   of you took is split three ways, and everyone else stays out of it.
 - **A settle-up you can paste into the group chat**, as text, in one tap.
+- **Search for flights, stays and activities from inside a trip**, and add a result as a booking in
+  one tap. See *Search providers* below for what is and is not connected.
+- **Price alerts.** Watch a route or a stay, set the price you want to be told about, and let the
+  scheduled sweep re-check it.
+- **An estimate of what the same trip would cost as a package**, from the usual industry margins —
+  shown as an order of magnitude, deliberately kept out of the savings totals.
 - **A budget you can actually read** — committed vs. remaining, per traveller, with the overrun
   called out rather than hidden.
 - **Shared costs, settled fairly.** Expenses are split evenly or kept personal; rounding cents are
@@ -57,6 +63,36 @@ Or create a new account from the same screen — signup is a real flow, not a mo
 Copy `.env.example` to `.env` if you want to change the defaults:
 
 - `DATABASE_PATH` — where the SQLite file lives (default `./data/journey-valley.db`).
+- `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET` / `AMADEUS_ENV` — live flight search.
+- `WATCH_CRON_SECRET` — shared secret for the scheduled price-watch sweep.
+
+## Search providers
+
+Search is provider-agnostic: `src/lib/search/` defines the interface, and the app picks a provider
+per kind of search.
+
+- **Offline estimates** (default). Plausible prices derived from the query itself, stable for a
+  given search. They are not offers, cannot be booked, and every screen that shows them says so.
+  They exist so the flow is usable — and testable — with no account and no key. They also know
+  nothing about geography: a long-haul flight is not priced differently from a short hop.
+- **Amadeus Self-Service** (flights), enabled by setting the two credentials above. Written against
+  the documented OAuth2 + `/v2/shopping/flight-offers` endpoints. It has never been run against the
+  live service — Amadeus was unreachable from the machine this was built on — so treat the first
+  live call as something to watch. If it fails or rate-limits, the app falls back to the estimates
+  and says which provider actually answered.
+
+Adding another provider means implementing `SearchProvider` and registering it in
+`src/lib/search/index.ts`; nothing else in the app needs to change.
+
+### Scheduling the price sweep
+
+`POST /api/watches/check` re-checks every watch. It refuses to run until `WATCH_CRON_SECRET` is
+set, so an unconfigured deployment cannot be used to hammer a paid API. Point whatever scheduler
+you already have at it:
+
+```cron
+0 7 * * *  curl -fsS -X POST https://your-host/api/watches/check -H "x-cron-key: $WATCH_CRON_SECRET"
+```
 
 ## On Android
 
@@ -108,12 +144,18 @@ src/
       spending/       every expense across your trips
       savings/        agency comparison, trip by trip
       account/        plan and profile
+    api/watches/      the scheduled price-watch sweep
   components/         shared UI, nav, charts
   lib/                domain logic, database, auth
+    search/           provider interface, offline estimates, Amadeus adapter
 scripts/smoke.mjs     end-to-end browser test
 ```
 
 ## Known gaps
+
+- The Amadeus adapter is unverified against the live service, and covers flights only: stays and
+  activities always fall back to the offline estimates.
+- Price alerts notify inside the app only — they land in the trip's activity feed, not in an inbox.
 
 - Plan changes flip immediately; a real deployment would go through a payment provider and switch
   the plan on a confirmed webhook.

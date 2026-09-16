@@ -43,10 +43,16 @@ const DEMO_PASSWORD = "journey2026";
 const NEW_EMAIL = `smoke-${Date.now()}@example.com`;
 const NEW_PASSWORD = "smoke-password";
 
+const CRON_SECRET = "smoke-cron-secret";
 const dataDir = mkdtempSync(join(tmpdir(), "journey-valley-smoke-"));
 // Own process group, so the whole server tree dies with us.
 const server = spawn(join("node_modules", ".bin", "next"), ["start", "--port", String(PORT)], {
-  env: { ...process.env, DATABASE_PATH: join(dataDir, "smoke.db"), NODE_ENV: "production" },
+  env: {
+    ...process.env,
+    DATABASE_PATH: join(dataDir, "smoke.db"),
+    NODE_ENV: "production",
+    WATCH_CRON_SECRET: CRON_SECRET,
+  },
   stdio: ["ignore", "pipe", "pipe"],
   detached: true,
 });
@@ -176,6 +182,56 @@ try {
   check(
     "the expense is counted against the budget",
     await page.getByText(/1\s268,40\s€/).first().isVisible(),
+  );
+
+  // 5b. Search, import a result, and set a price alert.
+  const searchForm = page.locator('form:has(input[name="target"])');
+  await searchForm.locator('input[name="destination"]').fill("Oslo");
+  await searchForm.locator('input[name="target"]').fill("400");
+  await page.getByRole("button", { name: "Chercher" }).click();
+  await page.waitForSelector("text=Estimations, pas des offres réelles");
+  check(
+    "offline results are labelled as estimates, never as offers",
+    await page.getByText("ne correspondent à aucune offre réservable").isVisible(),
+  );
+
+  const bookingsBefore = await page.locator("text=/^Réservations \\(\\d+\\)$/").innerText();
+  await page.getByRole("button", { name: "Ajouter", exact: true }).first().click();
+  await page.waitForFunction(
+    (before) => !document.body.innerText.includes(before),
+    bookingsBefore,
+  );
+  check(
+    "a search result can be imported as a booking",
+    (await page.locator("text=/^Réservations \\(\\d+\\)$/").innerText()) !== bookingsBefore,
+  );
+
+  await searchForm.locator('input[name="destination"]').fill("Oslo");
+  await searchForm.locator('input[name="target"]').fill("400");
+  await page.getByRole("button", { name: "Surveiller ce prix" }).click();
+  await page.waitForSelector("text=Vérifier maintenant");
+  check("a price alert can be created", await page.getByText(/Vol .*Oslo/).first().isVisible());
+
+  await page.getByRole("button", { name: "Vérifier maintenant" }).click();
+  await page.waitForSelector("text=Dernière vérification");
+  check(
+    "checking an alert records a price",
+    await page.getByText("Dernière vérification").first().isVisible(),
+  );
+
+  // 5c. The scheduled sweep, behind its shared secret.
+  const unauthorised = await fetch(`${BASE}/api/watches/check`, { method: "POST" });
+  check("the scheduled sweep refuses an unsigned call", unauthorised.status === 401);
+
+  const sweep = await fetch(`${BASE}/api/watches/check`, {
+    method: "POST",
+    headers: { "x-cron-key": CRON_SECRET },
+  });
+  const sweepBody = await sweep.json();
+  check(
+    "the scheduled sweep checks the watches",
+    sweep.ok && sweepBody.checked >= 1,
+    JSON.stringify(sweepBody),
   );
 
   // 6. The preparation checklist.

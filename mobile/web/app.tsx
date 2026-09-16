@@ -25,6 +25,7 @@ import {
   initials,
 } from "../../src/lib/format";
 import { formatMoney, parseAmountToCents, percentOf } from "../../src/lib/money";
+import { estimatePackagePrice } from "../../src/lib/package";
 import {
   availableStageActions,
   checkStageChange,
@@ -297,6 +298,7 @@ function TripScreen({
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, "owner");
   const when = countdown(trip.start_date, trip.end_date);
+  const packageEstimate = estimatePackagePrice(bookings);
   const nameById = new Map(travellers.map((traveller) => [traveller.user_id, traveller.name]));
 
   const runAction = (action: StageAction) => {
@@ -470,6 +472,29 @@ function TripScreen({
                 )}
               </p>
             )}
+          </div>
+        </Card>
+      )}
+
+      {savings.basis === "none" && packageEstimate.components > 0 && (
+        <Card title="Estimation : le même voyage en formule">
+          <div className="space-y-2 px-4 py-3 text-sm text-stone-600">
+            <p>
+              Vos réservations totalisent{" "}
+              <strong className="text-stone-900">
+                {formatMoney(packageEstimate.your_cost_cents, CURRENCY)}
+              </strong>
+              . En agence, elles tourneraient plutôt autour de{" "}
+              <strong className="text-stone-900">
+                {formatMoney(packageEstimate.low_cents, CURRENCY)} –{" "}
+                {formatMoney(packageEstimate.high_cents, CURRENCY)}
+              </strong>
+              .
+            </p>
+            <p className="text-xs leading-relaxed text-stone-500">
+              Ordre de grandeur calculé à partir des marges habituelles du secteur. Il ne compte
+              pas dans vos économies : pour ça, saisissez un vrai devis.
+            </p>
           </div>
         </Card>
       )}

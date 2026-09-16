@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { ACTIVE_STAGES } from "./plans";
+import type { PriceWatch } from "./watch";
 import type {
   Booking,
   ChecklistItem,
@@ -137,6 +138,29 @@ export function listChecklist(tripId: number): ChecklistItem[] {
       `SELECT * FROM checklist_items WHERE trip_id = ? ORDER BY done, position, id`,
     )
     .all(tripId);
+}
+
+export function listWatches(tripId: number): PriceWatch[] {
+  return getDb()
+    .prepare<[number], PriceWatch>(
+      `SELECT * FROM price_watches WHERE trip_id = ? ORDER BY created_at DESC, id DESC`,
+    )
+    .all(tripId);
+}
+
+export interface PricePoint {
+  price_cents: number;
+  vendor: string | null;
+  checked_at: string;
+}
+
+export function listPricePoints(watchId: number, limit = 12): PricePoint[] {
+  return getDb()
+    .prepare<[number, number], PricePoint>(
+      `SELECT price_cents, vendor, checked_at FROM price_points
+        WHERE watch_id = ? ORDER BY checked_at DESC, id DESC LIMIT ?`,
+    )
+    .all(watchId, limit);
 }
 
 /** Only trips you created count against your plan's allowance. */

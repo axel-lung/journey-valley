@@ -24,12 +24,15 @@ import {
 } from "@/lib/budget";
 import { countdown, formatDate, formatDateRange, formatNights, initials } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
+import { estimatePackagePrice } from "@/lib/package";
+import { providerFor } from "@/lib/search";
 import {
   getTripSummary,
   listBookings,
   listChecklist,
   listExpenses,
   listMembers,
+  listWatches,
 } from "@/lib/trips";
 import type { BookingType, ExpenseCategory } from "@/lib/types";
 import {
@@ -48,7 +51,9 @@ import { BookingForm } from "./booking-form";
 import { Checklist } from "./checklist";
 import { CompanionForm } from "./companion-form";
 import { ExpenseForm } from "./expense-form";
+import { SearchPanel } from "./search-panel";
 import { ShareSummary } from "./share-summary";
+import { Watches } from "./watches";
 
 const BOOKING_LABEL: Record<BookingType, string> = {
   flight: "Vol",
@@ -94,6 +99,7 @@ export default async function TripPage({
   const bookings = listBookings(trip.id);
   const expenses = listExpenses(trip.id);
   const checklist = listChecklist(trip.id);
+  const watches = listWatches(trip.id);
 
   const budget = budgetStatus(trip, bookings, expenses);
   const savings = savingsSummary(trip, bookings);
@@ -101,6 +107,8 @@ export default async function TripPage({
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, trip.my_role);
   const when = countdown(trip.start_date, trip.end_date);
+  const packageEstimate = estimatePackagePrice(bookings);
+  const searchProviderIsLive = providerFor("flight").live;
   const isOwner = trip.my_role === "owner";
   const editable = trip.stage !== "cancelled";
 
@@ -304,6 +312,50 @@ export default async function TripPage({
           </div>
         </Card>
       )}
+
+      {savings.basis === "none" && packageEstimate.components > 0 && (
+        <Card title="Estimation : ce que ça coûterait en formule">
+          <div className="space-y-2.5 px-5 py-4 text-sm text-stone-600">
+            <p>
+              Vos {packageEstimate.components} réservation
+              {packageEstimate.components > 1 ? "s" : ""} totalisent{" "}
+              <strong className="text-stone-900">
+                {formatMoney(packageEstimate.your_cost_cents, currency)}
+              </strong>
+              . Vendues dans un forfait, elles tourneraient plutôt autour de{" "}
+              <strong className="text-stone-900">
+                {formatMoney(packageEstimate.low_cents, currency)} –{" "}
+                {formatMoney(packageEstimate.high_cents, currency)}
+              </strong>
+              , soit environ {formatMoney(packageEstimate.mid_difference_cents, currency)} de plus.
+            </p>
+            <p className="text-xs leading-relaxed text-stone-500">
+              Calcul indicatif, à partir des marges habituelles du secteur (faibles sur les vols,
+              plus élevées sur l'hébergement et les excursions). Il ne compte pas dans vos
+              économies : pour ça, saisissez un vrai devis sur le voyage ou sur une réservation.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      <Card title="Chercher vols, logements et activités">
+        <SearchPanel
+          tripId={trip.id}
+          destination={trip.destination_city}
+          startDate={trip.start_date}
+          endDate={trip.end_date}
+          travellers={members.length}
+          homeCity={user.home_city}
+          currency={currency}
+        />
+      </Card>
+
+      <Watches
+        tripId={trip.id}
+        watches={watches}
+        currency={currency}
+        liveProvider={searchProviderIsLive}
+      />
 
       <Checklist tripId={trip.id} items={checklist} editable={editable} />
 
