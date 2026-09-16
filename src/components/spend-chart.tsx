@@ -7,12 +7,12 @@ const SERIES_BOOKED = "#2a78d6";
 const SERIES_SPENT = "#eb6834";
 
 const CATEGORY_LABEL: Record<string, string> = {
-  food: "Food and drink",
-  transport: "Getting around",
-  lodging: "Stays",
-  activities: "Things to do",
-  shopping: "Shopping",
-  other: "Other",
+  food: "Nourriture et boissons",
+  transport: "Transports sur place",
+  lodging: "Hébergement",
+  activities: "Activités",
+  shopping: "Achats",
+  other: "Divers",
 };
 
 /**
@@ -31,30 +31,30 @@ export function MonthlySpendChart({
 
   return (
     <figure className="px-5 pb-4 pt-4">
-      <figcaption className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
-        <LegendSwatch color={SERIES_BOOKED} label="Booked ahead" />
-        <LegendSwatch color={SERIES_SPENT} label="Spent on the trip" />
-        <span className="ml-auto text-slate-400">Peak {formatMoneyCompact(max, currency)}</span>
+      <figcaption className="flex flex-wrap items-center gap-4 text-xs text-stone-600">
+        <LegendSwatch color={SERIES_BOOKED} label="Réservé à l’avance" />
+        <LegendSwatch color={SERIES_SPENT} label="Dépensé sur place" />
+        <span className="ml-auto text-stone-400">Max. {formatMoneyCompact(max, currency)}</span>
       </figcaption>
 
-      <div className="mt-4 flex h-44 items-end gap-3 border-b border-slate-200">
+      <div className="mt-4 flex h-44 items-end gap-3 border-b border-stone-200">
         {points.map((point) => (
           <div key={point.month} className="group relative flex h-full flex-1 items-end gap-0.5">
             <Bar
               heightPercent={percentOf(point.booked_cents, max)}
               color={SERIES_BOOKED}
-              label={`Booked in ${point.month}`}
+              label={`Réservé en ${point.month}`}
             />
             <Bar
               heightPercent={percentOf(point.spent_cents, max)}
               color={SERIES_SPENT}
-              label={`Spent in ${point.month}`}
+              label={`Dépensé en ${point.month}`}
             />
 
-            <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg group-hover:block">
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-stone-900 px-2.5 py-1.5 text-xs text-white shadow-lg group-hover:block">
               <p className="font-medium">{point.month}</p>
-              <p className="text-slate-300">Booked {formatMoney(point.booked_cents, currency)}</p>
-              <p className="text-slate-300">Spent {formatMoney(point.spent_cents, currency)}</p>
+              <p className="text-stone-300">Réservé {formatMoney(point.booked_cents, currency)}</p>
+              <p className="text-stone-300">Dépensé {formatMoney(point.spent_cents, currency)}</p>
             </div>
           </div>
         ))}
@@ -62,25 +62,25 @@ export function MonthlySpendChart({
 
       <div className="mt-2 flex gap-3">
         {points.map((point) => (
-          <div key={point.month} className="flex-1 text-center text-xs text-slate-500">
+          <div key={point.month} className="flex-1 text-center text-xs text-stone-500">
             {point.label}
           </div>
         ))}
       </div>
 
-      <details className="mt-4 text-xs text-slate-500">
-        <summary className="cursor-pointer select-none hover:text-slate-800">View as table</summary>
+      <details className="mt-4 text-xs text-stone-500">
+        <summary className="cursor-pointer select-none hover:text-stone-800">Voir le tableau</summary>
         <table className="mt-2 w-full text-left">
-          <thead className="text-slate-400">
+          <thead className="text-stone-400">
             <tr>
-              <th className="py-1 font-medium">Month</th>
-              <th className="py-1 text-right font-medium">Booked</th>
-              <th className="py-1 text-right font-medium">Spent</th>
+              <th className="py-1 font-medium">Mois</th>
+              <th className="py-1 text-right font-medium">Réservé</th>
+              <th className="py-1 text-right font-medium">Dépensé</th>
             </tr>
           </thead>
-          <tbody className="text-slate-600">
+          <tbody className="text-stone-600">
             {points.map((point) => (
-              <tr key={point.month} className="border-t border-slate-100">
+              <tr key={point.month} className="border-t border-stone-100">
                 <td className="py-1">{point.month}</td>
                 <td className="py-1 text-right tabular-nums">
                   {formatMoney(point.booked_cents, currency)}
@@ -146,14 +146,14 @@ export function CategorySpendBars({
       {rows.map((row) => (
         <li key={row.category}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-stone-700">
               {CATEGORY_LABEL[row.category] ?? row.category}
             </span>
-            <span className="tabular-nums text-slate-600">
+            <span className="tabular-nums text-stone-600">
               {formatMoney(row.total_cents, currency)}
             </span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full"
               style={{
@@ -184,8 +184,8 @@ export function SavingsBars({
   const max = Math.max(1, agencyCents, yourCents);
 
   const rows = [
-    { label: "Agency quote", value: agencyCents, color: SERIES_SPENT },
-    { label: "You paid", value: yourCents, color: SERIES_BOOKED },
+    { label: "Devis agence", value: agencyCents, color: SERIES_SPENT },
+    { label: "Vous avez payé", value: yourCents, color: SERIES_BOOKED },
   ];
 
   return (
@@ -193,10 +193,10 @@ export function SavingsBars({
       {rows.map((row) => (
         <div key={row.label}>
           <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="font-medium text-slate-700">{row.label}</span>
-            <span className="tabular-nums text-slate-600">{formatMoney(row.value, currency)}</span>
+            <span className="font-medium text-stone-700">{row.label}</span>
+            <span className="tabular-nums text-stone-600">{formatMoney(row.value, currency)}</span>
           </div>
-          <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-1.5 h-3 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full"
               style={{

@@ -8,6 +8,8 @@ while you are there, and record what a travel agency quoted for the same thing. 
 does the arithmetic: how much of the budget is left, what each traveller owes, and how much of
 the agency's margin stayed in your pocket.
 
+The interface is in French; the code, comments and tests are in English.
+
 ## What it does
 
 - **Trips through their real stages** — idea → planning → booked → on the road → completed. The
@@ -15,12 +17,19 @@ the agency's margin stayed in your pocket.
   organiser can cancel.
 - **Savings against an agency quote.** Record a package quote for the whole trip, or a comparable
   price on individual bookings. The comparison never inflates the figure: with per-booking quotes
-  only the quoted lines are compared, on both sides.
+  only the quoted lines are compared, on both sides, and a package quote on a trip that is still
+  being booked is marked provisional and kept out of the totals.
+- **A checklist per trip** — passport, insurance, adaptor — with a one-tap template of the things
+  almost every trip needs.
+- **Expenses split between the people they concern**, not always the whole group: the taxi three
+  of you took is split three ways, and everyone else stays out of it.
+- **A settle-up you can paste into the group chat**, as text, in one tap.
 - **A budget you can actually read** — committed vs. remaining, per traveller, with the overrun
   called out rather than hidden.
 - **Shared costs, settled fairly.** Expenses are split evenly or kept personal; rounding cents are
   rotated between travellers so shares are whole cents and still add up exactly. The settle-up view
   turns balances into the fewest payments that square everyone off.
+- **Countdowns and dates in French** — `J − 12`, `12 – 21 oct. 2026` — from one tested module.
 - **Companions.** Invite people by the email they signed up with; they see the trip, add their own
   bookings and expenses, and are counted in every split.
 - **Free and Plus plans.** Free keeps two trips active with one companion each; Plus lifts both
@@ -84,8 +93,8 @@ the machine when one is available (`CHROMIUM_PATH` overrides it).
 - **Money is integer cents everywhere.** `src/lib/money.ts` parses what people actually type
   (`1 234,56`, `€1,500`, `89`) and formats it back; nothing in the app multiplies a float by 100.
 - **The interesting logic is pure and tested.** `budget.ts` (budgets, agency savings, cost
-  splitting, settlement) and `stages.ts` (who may move a trip where) have no database or React
-  dependency, so `npm test` covers them directly.
+  splitting, settlement), `stages.ts` (who may move a trip where) and `format.ts` (French dates and
+  countdowns) have no database or React dependency, so `npm test` covers them directly.
 - **Authorisation is by membership.** Trip queries join `trip_members`, so a trip you are not on
   returns nothing at all — the smoke test checks that another account's trip 404s.
 
@@ -109,6 +118,7 @@ scripts/smoke.mjs     end-to-end browser test
 - Plan changes flip immediately; a real deployment would go through a payment provider and switch
   the plan on a confirmed webhook.
 - Receipts are recorded by file name only — there is no upload or storage yet.
+- The interface is French only; there is no translation layer, the strings are in the components.
 - Companions must already have an account; there is no email invitation.
 - Every trip is priced in the owner's currency. Cross-currency trips would need conversion at a
   recorded rate, not a display-time one.

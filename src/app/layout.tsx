@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Journey Valley — corporate travel management",
+  title: "Journey Valley — organisez vos voyages, gardez la marge de l'agence",
   description:
-    "Trip requests, approvals, travel policy compliance and expense tracking for distributed teams.",
+    "Préparez vos voyages vous-même : budget, réservations, checklist, partage des frais entre voyageurs et comparaison avec un devis d'agence.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="fr">
       <body className="font-sans">{children}</body>
     </html>
   );

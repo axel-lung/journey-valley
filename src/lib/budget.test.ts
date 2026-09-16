@@ -73,6 +73,26 @@ describe("savingsSummary", () => {
     expect(summary.saved_cents).toBe(12_000);
   });
 
+  it("marks a package comparison provisional while the trip is still being booked", () => {
+    const planning = savingsSummary({ agency_quote_cents: 300_000, stage: "planning" }, [
+      { amount_cents: 120_000, agency_quote_cents: 0 },
+    ]);
+    expect(planning.provisional).toBe(true);
+
+    const booked = savingsSummary({ agency_quote_cents: 300_000, stage: "booked" }, [
+      { amount_cents: 210_000, agency_quote_cents: 0 },
+    ]);
+    expect(booked.provisional).toBe(false);
+  });
+
+  it("never marks a line-by-line comparison provisional", () => {
+    // Each compared line prices the same thing on both sides, whatever the stage.
+    const summary = savingsSummary({ agency_quote_cents: 0, stage: "idea" }, [
+      { amount_cents: 40_000, agency_quote_cents: 52_000 },
+    ]);
+    expect(summary.provisional).toBe(false);
+  });
+
   it("says nothing was compared when no quote exists", () => {
     const summary = savingsSummary({ agency_quote_cents: 0 }, [
       { amount_cents: 40_000, agency_quote_cents: 0 },
@@ -91,6 +111,18 @@ describe("savingsSummary", () => {
 });
 
 describe("savingsFromTotals", () => {
+  it("carries the stage through, so a list row knows it is provisional", () => {
+    expect(
+      savingsFromTotals({
+        agency_quote_cents: 300_000,
+        booked_cents: 100_000,
+        agency_total_cents: 0,
+        quoted_paid_cents: 0,
+        stage: "planning",
+      }).provisional,
+    ).toBe(true);
+  });
+
   it("matches the trip-quote comparison from aggregates", () => {
     const summary = savingsFromTotals({
       agency_quote_cents: 300_000,
@@ -156,6 +188,34 @@ describe("splitBalances", () => {
     const favouredFirst = first.find((b) => b.share_cents === 34)?.user_id;
     const favouredSecond = second.find((b) => b.share_cents === 34)?.user_id;
     expect(favouredFirst).not.toBe(favouredSecond);
+  });
+
+  it("splits only between the travellers an expense names", () => {
+    const balances = splitBalances(members, [
+      { id: 1, paid_by: 1, amount_cents: 30_000, shared: 1, participant_ids: [1, 2] },
+    ]);
+    expect(balances.map((balance) => balance.share_cents)).toEqual([15_000, 15_000, 0]);
+    expect(balances[2].net_cents).toBe(0);
+  });
+
+  it("falls back to everyone when the named list is empty or unknown", () => {
+    const empty = splitBalances(members, [
+      { id: 1, paid_by: 1, amount_cents: 30_000, shared: 1, participant_ids: [] },
+    ]);
+    expect(empty.map((balance) => balance.share_cents)).toEqual([10_000, 10_000, 10_000]);
+
+    const gone = splitBalances(members, [
+      { id: 1, paid_by: 1, amount_cents: 30_000, shared: 1, participant_ids: [98, 99] },
+    ]);
+    expect(gone.map((balance) => balance.share_cents)).toEqual([10_000, 10_000, 10_000]);
+  });
+
+  it("keeps a named split's rounding whole and exact", () => {
+    const balances = splitBalances(members, [
+      { id: 1, paid_by: 3, amount_cents: 1_000, shared: 1, participant_ids: [1, 3] },
+    ]);
+    expect(balances[0].share_cents + balances[2].share_cents).toBe(1_000);
+    expect(balances[1].share_cents).toBe(0);
   });
 
   it("leaves a personal expense with its payer", () => {

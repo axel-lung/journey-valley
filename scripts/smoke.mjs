@@ -75,16 +75,15 @@ async function waitForServer() {
 
 async function signIn(page, email, password) {
   await page.goto(`${BASE}/login`);
-  // The tab and the submit button share a label, so address them separately.
-  await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
+  await page.getByRole("button", { name: "J'ai un compte" }).click();
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
-  await page.locator("form").getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.locator("form").getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL("**/dashboard");
 }
 
 async function signOut(page) {
-  await page.getByRole("button", { name: "Sign out" }).first().click();
+  await page.getByRole("button", { name: /Se déconnecter|Quitter/ }).first().click();
   await page.waitForURL("**/login");
 }
 
@@ -97,7 +96,7 @@ async function createTrip(page, { title, city, country, budget, quote }) {
   await page.fill('input[name="end_date"]', "2026-12-06");
   if (budget) await page.fill('input[name="budget"]', budget);
   if (quote) await page.fill('input[name="agency_quote"]', quote);
-  await page.getByRole("button", { name: "Create the trip" }).click();
+  await page.getByRole("button", { name: "Créer le voyage" }).click();
 }
 
 try {
@@ -107,14 +106,14 @@ try {
 
   // 1. A new visitor signs up.
   await page.goto(`${BASE}/login`);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("button", { name: "Je m'inscris" }).click();
   await page.fill('input[name="name"]', "Smoke Tester");
   await page.fill('input[name="email"]', NEW_EMAIL);
   await page.fill('input[name="password"]', NEW_PASSWORD);
   await page.fill('input[name="home_city"]', "Lyon");
-  await page.getByRole("button", { name: "Create my free account" }).click();
+  await page.getByRole("button", { name: "Créer mon compte gratuit" }).click();
   await page.waitForURL("**/dashboard");
-  check("a new account can sign up and lands on the overview", await page.getByText("Saved vs. agencies").isVisible());
+  check("a new account can sign up and lands on the overview", await page.getByText("Gardé dans votre poche").first().isVisible());
 
   // 2. Plan a trip with a budget and an agency quote.
   await createTrip(page, {
@@ -126,49 +125,71 @@ try {
   });
   await page.waitForURL(/\/trips\/\d+$/);
   const tripUrl = page.url();
-  check("a trip starts as an idea", await page.getByText("Idea").first().isVisible());
+  check("a trip starts as an idea", await page.getByText("Idée").first().isVisible());
 
   // 3. A booking with its own price feeds the budget and the savings maths.
-  await page.getByText("Add a booking").click();
+  await page.getByText("Ajouter une réservation").click();
   // Both the booking and expense forms have an `amount` field, so scope to the form.
   const bookingForm = page.locator('form:has(select[name="type"])');
   await bookingForm.locator('input[name="vendor"]').fill("Norwegian");
   await bookingForm.locator('input[name="amount"]').fill("1 200");
   await bookingForm.locator('input[name="start_at"]').fill("2026-12-01");
-  await page.getByRole("button", { name: "Add to the trip" }).click();
+  await page.getByRole("button", { name: "Ajouter au voyage" }).click();
   await page.waitForSelector("text=Norwegian");
   check("the booking lands on the trip", await page.getByText("Norwegian").first().isVisible());
+  // The trip is still an idea, so the package comparison must say it is provisional.
   check(
-    "the package quote produces a saving",
-    await page.getByText("Booking it yourself keeps").isVisible(),
-  );
-  check(
-    "the saving is the quote minus what was paid",
-    await page.getByText("€800").first().isVisible(),
+    "a package quote on an unbooked trip is flagged provisional",
+    await page.getByText("n'est pas entièrement réservé").isVisible(),
   );
 
   // 4. Stage changes follow the machine: idea → planning → booked.
-  await page.getByRole("button", { name: "Start planning" }).click();
-  await page.waitForSelector("text=Planning");
-  await page.getByRole("button", { name: "Everything is booked" }).click();
-  await page.waitForSelector("text=Booked");
-  check("the trip walks through its stages", await page.getByText("Booked").first().isVisible());
+  await page.getByRole("button", { name: "Passer en préparation" }).click();
+  await page.waitForSelector("text=En préparation");
+  await page.getByRole("button", { name: "Tout est réservé" }).click();
+  // "Réservé" also appears in the bookings heading, so wait on the saving copy
+  // that only a finished booking produces.
+  await page.waitForSelector("text=Réserver vous-même vous garde");
+  check(
+    "the trip walks through its stages",
+    await page.getByRole("button", { name: "C'est parti !" }).isVisible(),
+  );
+  // Once booked, the same comparison becomes a real saving.
+  check(
+    "the saving becomes final once everything is booked",
+    await page.getByText("Réserver vous-même vous garde").isVisible(),
+  );
+  check(
+    "the saving is the quote minus what was paid",
+    await page.getByText("800 €").first().isVisible(),
+  );
 
   // 5. On-trip spending shows up against the budget.
-  await page.getByText("Log an expense").click();
+  await page.getByText("Noter une dépense").click();
   const expenseForm = page.locator('form:has(input[name="shared"])');
   await expenseForm.locator('input[name="amount"]').fill("68,40");
   await expenseForm.locator('input[name="spent_on"]').fill("2026-12-02");
   await expenseForm.locator('input[name="description"]').fill("Dinner in Oslo");
-  await page.getByRole("button", { name: "Log it" }).click();
+  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
   await page.waitForSelector("text=Dinner in Oslo");
   check("an expense is logged", await page.getByText("Dinner in Oslo").first().isVisible());
   check(
     "the expense is counted against the budget",
-    await page.getByText("€1,268.40").first().isVisible(),
+    await page.getByText(/1\s268,40\s€/).first().isVisible(),
   );
 
-  // 6. The savings page rolls trips up.
+  // 6. The preparation checklist.
+  await page.getByRole("button", { name: "Ajouter les essentiels" }).click();
+  await page.waitForSelector("text=Assurance voyage");
+  check("the checklist template can be added", await page.getByText("Assurance voyage").isVisible());
+  await page.getByRole("button", { name: /^Cocher Assurance voyage$/ }).click();
+  await page.waitForSelector('button[aria-label="Décocher Assurance voyage"]');
+  check(
+    "a checklist item can be ticked off",
+    await page.getByRole("button", { name: "Décocher Assurance voyage" }).isVisible(),
+  );
+
+  // 7. The savings page rolls trips up.
   await page.goto(`${BASE}/savings`);
   check("the savings page lists the trip", await page.getByText("Smoke test — Oslo").first().isVisible());
 
@@ -178,17 +199,17 @@ try {
   await page.goto(`${BASE}/trips/new`);
   check(
     "the free plan blocks a third active trip",
-    await page.getByText("You have reached your plan's limit").isVisible(),
+    await page.getByText("limite de votre forfait").first().isVisible(),
   );
 
   // 8. Upgrading lifts the limit.
   await page.goto(`${BASE}/account`);
-  await page.getByRole("button", { name: "Upgrade to Plus" }).click();
-  await page.waitForSelector("text=Move back to Free");
+  await page.getByRole("button", { name: "Passer à Plus" }).last().click();
+  await page.waitForSelector("text=Revenir à Découverte");
   await page.goto(`${BASE}/trips/new`);
   check(
     "Plus removes the limit",
-    await page.getByRole("button", { name: "Create the trip" }).isVisible(),
+    await page.getByRole("button", { name: "Créer le voyage" }).isVisible(),
   );
 
   // 9. A trip you are not on is not reachable.
@@ -197,12 +218,27 @@ try {
   const response = await page.goto(tripUrl);
   check("someone else's trip is not visible", response.status() === 404, `status ${response?.status()}`);
 
-  // 10. The seeded shared trip settles up.
+  // 11. The seeded shared trip settles up.
   await page.goto(`${BASE}/trips?filter=all`);
-  await page.getByText("Lisbon long weekend").click();
+  await page.getByText("Week-end à Lisbonne").click();
   await page.waitForURL(/\/trips\/\d+$/);
-  check("shared costs produce a settlement", await page.getByText("Fewest payments").isVisible());
+  check("shared costs produce a settlement", await page.getByText("Pour être quittes").isVisible());
   check("balances are shown per traveller", await page.getByText("Sam Ortega").first().isVisible());
+
+  // 12. An expense split between only some travellers spares the others.
+  await page.getByText("Noter une dépense").click();
+  const sharedForm = page.locator('form:has(input[name="participants"])');
+  await sharedForm.locator('input[name="amount"]').fill("40");
+  await sharedForm.locator('input[name="description"]').fill("Taxi à deux");
+  // Untick Sam, leaving the cost on Camille alone. The payer dropdown carries
+  // the same names, so target the participant chip's own label.
+  await sharedForm.locator('label:has(input[name="participants"])', { hasText: "Sam Ortega" }).click();
+  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
+  await page.waitForSelector("text=Taxi à deux");
+  check(
+    "an expense can name who it concerns",
+    await page.getByText(/partagée entre Camille/).first().isVisible(),
+  );
 } finally {
   await browser?.close();
   try {

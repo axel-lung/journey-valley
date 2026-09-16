@@ -2,6 +2,7 @@ import { getDb } from "./db";
 import { ACTIVE_STAGES } from "./plans";
 import type {
   Booking,
+  ChecklistItem,
   Expense,
   MemberRole,
   Trip,
@@ -104,9 +105,36 @@ export function listBookings(tripId: number): Booking[] {
 }
 
 export function listExpenses(tripId: number): Expense[] {
-  return getDb()
-    .prepare<[number], Expense>(
+  const rows = getDb()
+    .prepare<[number], Omit<Expense, "participant_ids"> & { participant_ids: string | null }>(
       `SELECT * FROM expenses WHERE trip_id = ? ORDER BY spent_on DESC, id DESC`,
+    )
+    .all(tripId);
+
+  return rows.map((row) => ({ ...row, participant_ids: parseParticipants(row.participant_ids) }));
+}
+
+/** SQLite has no array type, so the participants ride as a JSON list. */
+function parseParticipants(raw: string | null): number[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const ids = parsed.filter((value): value is number => Number.isInteger(value));
+    return ids.length > 0 ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
+export function serialiseParticipants(ids: number[] | null): string | null {
+  return ids && ids.length > 0 ? JSON.stringify(ids) : null;
+}
+
+export function listChecklist(tripId: number): ChecklistItem[] {
+  return getDb()
+    .prepare<[number], ChecklistItem>(
+      `SELECT * FROM checklist_items WHERE trip_id = ? ORDER BY done, position, id`,
     )
     .all(tripId);
 }

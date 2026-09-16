@@ -2,13 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { SavingsBars } from "@/components/spend-chart";
+import { coverStyle } from "@/lib/cover";
 import {
   Badge,
   Card,
   EmptyState,
   ErrorNotice,
+  Meter,
+  ProvisionalNote,
   StatTile,
-  TableShell,
   buttonClass,
   secondaryButtonClass,
 } from "@/components/ui";
@@ -20,8 +22,15 @@ import {
   splitBalances,
   tripNights,
 } from "@/lib/budget";
+import { countdown, formatDate, formatDateRange, formatNights, initials } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
-import { getTripSummary, listBookings, listExpenses, listMembers } from "@/lib/trips";
+import {
+  getTripSummary,
+  listBookings,
+  listChecklist,
+  listExpenses,
+  listMembers,
+} from "@/lib/trips";
 import type { BookingType, ExpenseCategory } from "@/lib/types";
 import {
   availableStageActions,
@@ -36,8 +45,18 @@ import {
   removeCompanionAction,
 } from "../actions";
 import { BookingForm } from "./booking-form";
+import { Checklist } from "./checklist";
 import { CompanionForm } from "./companion-form";
 import { ExpenseForm } from "./expense-form";
+import { ShareSummary } from "./share-summary";
+
+const BOOKING_LABEL: Record<BookingType, string> = {
+  flight: "Vol",
+  stay: "Logement",
+  transport: "Transport",
+  activity: "Activité",
+  other: "Autre",
+};
 
 const BOOKING_ICON: Record<BookingType, string> = {
   flight: "✈",
@@ -48,12 +67,12 @@ const BOOKING_ICON: Record<BookingType, string> = {
 };
 
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
-  food: "Food and drink",
-  transport: "Getting around",
-  lodging: "Stays",
-  activities: "Things to do",
-  shopping: "Shopping",
-  other: "Other",
+  food: "Nourriture et boissons",
+  transport: "Transports sur place",
+  lodging: "Hébergement",
+  activities: "Activités",
+  shopping: "Achats",
+  other: "Divers",
 };
 
 export default async function TripPage({
@@ -74,98 +93,148 @@ export default async function TripPage({
   const members = listMembers(trip.id);
   const bookings = listBookings(trip.id);
   const expenses = listExpenses(trip.id);
+  const checklist = listChecklist(trip.id);
 
   const budget = budgetStatus(trip, bookings, expenses);
   const savings = savingsSummary(trip, bookings);
   const balances = splitBalances(members, expenses);
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, trip.my_role);
+  const when = countdown(trip.start_date, trip.end_date);
   const isOwner = trip.my_role === "owner";
   const editable = trip.stage !== "cancelled";
 
   const nameById = new Map(members.map((member) => [member.user_id, member.name]));
 
+  const summaryText = [
+    `${trip.title} — ${formatDateRange(trip.start_date, trip.end_date)}`,
+    `Total : ${formatMoney(budget.committed_cents, currency)} (${formatMoney(budget.per_traveller_cents, currency)} par personne)`,
+    "",
+    ...balances.map((balance) =>
+      balance.net_cents === 0
+        ? `${balance.name} : à jour`
+        : balance.net_cents > 0
+          ? `${balance.name} : on lui doit ${formatMoney(balance.net_cents, currency)}`
+          : `${balance.name} : doit ${formatMoney(-balance.net_cents, currency)}`,
+    ),
+    ...(transfers.length > 0
+      ? ["", "Pour être quittes :", ...transfers.map((transfer) => `${transfer.from_name} → ${transfer.to_name} : ${formatMoney(transfer.amount_cents, currency)}`)]
+      : []),
+  ].join("\n");
+
   return (
     <div className="space-y-6">
-      <header className="space-y-3">
-        <Link href="/trips" className="text-sm text-slate-500 hover:text-slate-900">
-          ← Back to trips
-        </Link>
+      <Link href="/trips" className="inline-block text-sm text-stone-500 hover:text-stone-900">
+        ← Retour aux voyages
+      </Link>
 
+      <header
+        className="relative overflow-hidden rounded-2xl px-6 py-7 text-white shadow-sm"
+        style={coverStyle(`${trip.destination_city}${trip.destination_country}`)}
+      >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl font-semibold text-slate-900">{trip.title}</h1>
-              <Badge className={STAGE_TONE[trip.stage]}>{STAGE_LABEL[trip.stage]}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className={`${STAGE_TONE[trip.stage]} shadow-sm`}>
+                {STAGE_LABEL[trip.stage]}
+              </Badge>
+              {when.upcoming && trip.stage !== "cancelled" && (
+                <span className="rounded-full bg-black/25 px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm">
+                  {when.label}
+                </span>
+              )}
               {budget.over_budget && (
-                <Badge className="bg-rose-50 text-rose-700 ring-rose-200">Over budget</Badge>
+                <span className="rounded-full bg-rose-500/90 px-2.5 py-0.5 text-xs font-semibold">
+                  Budget dépassé
+                </span>
               )}
             </div>
-            <p className="mt-1.5 text-sm text-slate-500">
-              {trip.destination_city}, {trip.destination_country} · {trip.start_date} →{" "}
-              {trip.end_date} · {tripNights(trip)} night{tripNights(trip) === 1 ? "" : "s"} ·{" "}
-              {members.length} traveller{members.length === 1 ? "" : "s"}
-              {!isOwner ? ` · organised by ${trip.owner_name}` : ""}
+
+            <h1 className="mt-2.5 text-2xl font-semibold drop-shadow-sm">{trip.title}</h1>
+            <p className="mt-1 text-sm text-white/85 drop-shadow-sm">
+              {trip.destination_city}, {trip.destination_country} ·{" "}
+              {formatDateRange(trip.start_date, trip.end_date)} · {formatNights(tripNights(trip))}
+              {!isOwner ? ` · organisé par ${trip.owner_name}` : ""}
             </p>
           </div>
 
-          {actions.length > 0 && (
-            <form action={changeStageAction} className="flex flex-wrap justify-end gap-2">
-              <input type="hidden" name="trip_id" value={trip.id} />
-              {actions.map((action, index) => (
-                <SubmitButton
-                  key={action}
-                  name="action"
-                  value={action}
-                  // Only the natural next step is emphasised; the rest stay quiet.
-                  className={index === 0 && action !== "cancel" ? buttonClass : secondaryButtonClass}
-                >
-                  {STAGE_ACTION_LABEL[action]}
-                </SubmitButton>
-              ))}
-            </form>
-          )}
+          <div className="flex -space-x-2">
+            {members.slice(0, 4).map((member) => (
+              <span
+                key={member.user_id}
+                title={member.name}
+                className="grid h-9 w-9 place-items-center rounded-full bg-white/90 text-xs font-semibold text-stone-700 ring-2 ring-white/40"
+              >
+                {initials(member.name)}
+              </span>
+            ))}
+          </div>
         </div>
 
-        <ErrorNotice message={error} />
+        {trip.summary && (
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/90">{trip.summary}</p>
+        )}
       </header>
 
-      {trip.summary && (
-        <p className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-700">
-          {trip.summary}
-        </p>
+      <ErrorNotice message={error} />
+
+      {actions.length > 0 && (
+        <form action={changeStageAction} className="flex flex-wrap gap-2">
+          <input type="hidden" name="trip_id" value={trip.id} />
+          {actions.map((action, index) => (
+            <SubmitButton
+              key={action}
+              name="action"
+              value={action}
+              // Only the natural next step is emphasised; the rest stay quiet.
+              className={index === 0 && action !== "cancel" ? buttonClass : secondaryButtonClass}
+            >
+              {STAGE_ACTION_LABEL[action]}
+            </SubmitButton>
+          ))}
+        </form>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
-          label="Committed"
+          label="Engagé"
           value={formatMoney(budget.committed_cents, currency)}
-          hint={`${formatMoney(budget.booked_cents, currency)} booked · ${formatMoney(budget.spent_cents, currency)} on the road`}
+          hint={`${formatMoney(budget.booked_cents, currency)} réservé · ${formatMoney(budget.spent_cents, currency)} sur place`}
         />
         <StatTile
-          label="Budget left"
+          label="Reste du budget"
           value={
-            trip.budget_cents > 0 ? formatMoney(budget.remaining_cents, currency) : "No budget set"
+            trip.budget_cents > 0 ? formatMoney(budget.remaining_cents, currency) : "Pas de budget"
           }
-          hint={trip.budget_cents > 0 ? `${budget.percent_used}% of ${formatMoney(trip.budget_cents, currency)}` : undefined}
+          hint={
+            trip.budget_cents > 0
+              ? `${budget.percent_used} % de ${formatMoney(trip.budget_cents, currency)}`
+              : "Vous pouvez en fixer un à tout moment"
+          }
           tone={budget.over_budget ? "warning" : "default"}
         />
         <StatTile
-          label="Per traveller"
+          label="Par personne"
           value={formatMoney(budget.per_traveller_cents, currency)}
-          hint={`Split ${members.length} way${members.length === 1 ? "" : "s"}`}
+          hint={`À ${members.length}`}
         />
         <StatTile
-          label="Saved vs. agency"
+          label="Économisé vs agence"
           value={savings.basis === "none" ? "—" : formatMoney(savings.saved_cents, currency)}
           hint={
             savings.basis === "none"
-              ? "Add a quote to compare"
-              : savings.basis === "trip_quote"
-                ? "Against the package quote"
-                : `Across ${savings.compared_lines} compared booking${savings.compared_lines === 1 ? "" : "s"}`
+              ? "Ajoutez un devis pour comparer"
+              : savings.provisional
+                ? "Estimation : réservations en cours"
+                : savings.basis === "trip_quote"
+                  ? "Face au devis du forfait"
+                  : `Sur ${savings.compared_lines} réservation${savings.compared_lines > 1 ? "s" : ""} comparée${savings.compared_lines > 1 ? "s" : ""}`
           }
-          tone={savings.basis !== "none" && savings.saved_cents > 0 ? "positive" : "default"}
+          tone={
+            savings.basis !== "none" && !savings.provisional && savings.saved_cents > 0
+              ? "positive"
+              : "default"
+          }
         />
       </div>
 
@@ -173,21 +242,16 @@ export default async function TripPage({
         <Card title="Budget">
           <div className="px-5 py-4">
             <div className="flex items-baseline justify-between text-sm">
-              <span className="text-slate-600">
-                {formatMoney(budget.committed_cents, currency)} of{" "}
+              <span className="text-stone-600">
+                {formatMoney(budget.committed_cents, currency)} sur{" "}
                 {formatMoney(trip.budget_cents, currency)}
               </span>
-              <span className="tabular-nums text-slate-500">{budget.percent_used}%</span>
+              <span className="tabular-nums text-stone-500">{budget.percent_used} %</span>
             </div>
-            <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className={`h-full rounded-full ${budget.over_budget ? "bg-rose-500" : "bg-brand-600"}`}
-                style={{ width: `${Math.max(budget.percent_used, 2)}%` }}
-              />
-            </div>
+            <Meter percent={budget.percent_used} over={budget.over_budget} className="mt-2" />
             {budget.over_budget && (
               <p className="mt-2 text-xs text-rose-600">
-                {formatMoney(-budget.remaining_cents, currency)} over what you set out to spend.
+                {formatMoney(-budget.remaining_cents, currency)} de plus que prévu.
               </p>
             )}
           </div>
@@ -198,8 +262,8 @@ export default async function TripPage({
         <Card
           title={
             savings.basis === "trip_quote"
-              ? "Against the agency's package price"
-              : "Against the quotes you recorded"
+              ? "Face au prix du forfait"
+              : "Face aux devis que vous avez notés"
           }
         >
           <SavingsBars
@@ -207,172 +271,177 @@ export default async function TripPage({
             yourCents={savings.your_cost_cents}
             currency={currency}
           />
-          <p className="border-t border-slate-100 px-5 py-3 text-sm text-slate-600">
-            {savings.saved_cents >= 0 ? (
-              <>
-                Booking it yourself keeps{" "}
-                <strong className="text-emerald-700">
-                  {formatMoney(savings.saved_cents, currency)}
-                </strong>{" "}
-                ({savings.saved_percent}%) that the agency would have taken.
-              </>
+          <div className="space-y-3 border-t border-stone-100 px-5 py-3.5">
+            {savings.provisional ? (
+              <ProvisionalNote>
+                Ce voyage n'est pas entièrement réservé. Le devis couvre tout le séjour, vos
+                réservations pas encore : l'écart de{" "}
+                <strong>{formatMoney(savings.saved_cents, currency)}</strong> est donc flatteur et
+                n'entre pas dans le total de la page Économies. Il deviendra définitif au statut
+                « réservé ».
+              </ProvisionalNote>
             ) : (
-              <>
-                This is{" "}
-                <strong className="text-rose-700">
-                  {formatMoney(-savings.saved_cents, currency)}
-                </strong>{" "}
-                more than the quote — worth checking what the package included.
-              </>
+              <p className="text-sm text-stone-600">
+                {savings.saved_cents >= 0 ? (
+                  <>
+                    Réserver vous-même vous garde{" "}
+                    <strong className="text-emerald-700">
+                      {formatMoney(savings.saved_cents, currency)}
+                    </strong>{" "}
+                    ({savings.saved_percent} %) que l'agence aurait pris.
+                  </>
+                ) : (
+                  <>
+                    C'est{" "}
+                    <strong className="text-rose-700">
+                      {formatMoney(-savings.saved_cents, currency)}
+                    </strong>{" "}
+                    de plus que le devis — regardez ce que le forfait incluait.
+                  </>
+                )}
+              </p>
             )}
-          </p>
+          </div>
         </Card>
       )}
 
-      <Card title="Bookings">
+      <Checklist tripId={trip.id} items={checklist} editable={editable} />
+
+      <Card title={`Réservations (${bookings.length})`}>
         {bookings.length === 0 ? (
           <EmptyState
-            title="Nothing booked yet"
-            hint="Flights, stays, car hire, that one activity you have to book ahead."
+            title="Rien de réservé pour l'instant"
+            hint="Vols, logements, location de voiture, l'activité qu'il faut prendre à l'avance."
           />
         ) : (
-          <TableShell
-            head={
-              <tr>
-                <th className="px-5 py-2.5">Booking</th>
-                <th className="px-5 py-2.5">When</th>
-                <th className="px-5 py-2.5 text-right">You paid</th>
-                <th className="px-5 py-2.5 text-right">Agency</th>
-                <th className="px-5 py-2.5" />
-              </tr>
-            }
-          >
+          <ul className="divide-y divide-stone-100">
             {bookings.map((booking) => (
-              <tr key={booking.id} className="hover:bg-slate-50">
-                <td className="px-5 py-3">
-                  <span className="font-medium text-slate-900">
-                    <span aria-hidden className="mr-1.5 text-slate-400">
+              <li
+                key={booking.id}
+                className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-stone-900">
+                    <span aria-hidden className="mr-1.5 text-stone-400">
                       {BOOKING_ICON[booking.type]}
                     </span>
                     {booking.vendor}
-                  </span>
-                  <p className="text-xs text-slate-500">
-                    {booking.description || booking.type}
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    {BOOKING_LABEL[booking.type]}
+                    {booking.description ? ` · ${booking.description}` : ""}
                     {booking.reference ? ` · ${booking.reference}` : ""}
                     {booking.nights
-                      ? ` · ${booking.nights} nights (${formatMoney(Math.round(booking.amount_cents / booking.nights), currency)}/night)`
+                      ? ` · ${booking.nights} nuits (${formatMoney(Math.round(booking.amount_cents / booking.nights), currency)} / nuit)`
                       : ""}
                   </p>
-                </td>
-                <td className="px-5 py-3 text-slate-600">
-                  {booking.start_at.slice(0, 10)}
-                  {booking.end_at && (
-                    <p className="text-xs text-slate-400">→ {booking.end_at.slice(0, 10)}</p>
+                  <p className="mt-0.5 text-xs text-stone-400">
+                    {formatDate(booking.start_at.slice(0, 10))}
+                    {booking.end_at ? ` → ${formatDate(booking.end_at.slice(0, 10))}` : ""}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="tabular-nums text-stone-800">
+                    {formatMoney(booking.amount_cents, currency)}
+                  </p>
+                  {booking.agency_quote_cents > 0 && (
+                    <p className="text-xs text-emerald-700">
+                      agence {formatMoney(booking.agency_quote_cents, currency)} · −
+                      {formatMoney(booking.agency_quote_cents - booking.amount_cents, currency)}
+                    </p>
                   )}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                  {formatMoney(booking.amount_cents, currency)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums">
-                  {booking.agency_quote_cents > 0 ? (
-                    <>
-                      <span className="text-slate-500">
-                        {formatMoney(booking.agency_quote_cents, currency)}
-                      </span>
-                      <p className="text-xs text-emerald-700">
-                        −{formatMoney(booking.agency_quote_cents - booking.amount_cents, currency)}
-                      </p>
-                    </>
-                  ) : (
-                    <span className="text-xs text-slate-400">—</span>
-                  )}
-                </td>
-                <td className="px-5 py-3 text-right">
                   {editable && (
                     <form action={deleteBookingAction}>
                       <input type="hidden" name="booking_id" value={booking.id} />
                       <button
                         type="submit"
-                        className="text-xs text-slate-400 hover:text-rose-600"
-                        aria-label={`Remove the booking with ${booking.vendor}`}
+                        className="text-xs text-stone-400 hover:text-rose-600"
+                        aria-label={`Supprimer la réservation ${booking.vendor}`}
                       >
-                        Remove
+                        Supprimer
                       </button>
                     </form>
                   )}
-                </td>
-              </tr>
+                </div>
+              </li>
             ))}
-          </TableShell>
+          </ul>
         )}
 
         {editable && (
-          <details className="border-t border-slate-100">
-            <summary className="cursor-pointer select-none px-5 py-3 text-sm font-medium text-brand-600 hover:text-brand-700">
-              Add a booking
+          <details className="border-t border-stone-100">
+            <summary className="cursor-pointer select-none px-5 py-3.5 text-sm font-semibold text-brand-700 hover:text-brand-800">
+              Ajouter une réservation
             </summary>
             <BookingForm tripId={trip.id} currency={currency} defaultDate={trip.start_date} />
           </details>
         )}
       </Card>
 
-      <Card title="Spending on the trip">
+      <Card title={`Dépenses sur place (${expenses.length})`}>
         {expenses.length === 0 ? (
-          <EmptyState title="Nothing logged yet" hint="Meals, taxis, tickets — split or personal." />
+          <EmptyState
+            title="Rien de noté"
+            hint="Les repas, les taxis, les billets — partagés ou personnels."
+          />
         ) : (
-          <TableShell
-            head={
-              <tr>
-                <th className="px-5 py-2.5">Expense</th>
-                <th className="px-5 py-2.5">Paid by</th>
-                <th className="px-5 py-2.5">When</th>
-                <th className="px-5 py-2.5 text-right">Amount</th>
-                <th className="px-5 py-2.5" />
-              </tr>
-            }
-          >
-            {expenses.map((expense) => (
-              <tr key={expense.id} className="hover:bg-slate-50">
-                <td className="px-5 py-3">
-                  <span className="font-medium text-slate-900">{expense.description}</span>
-                  <p className="text-xs text-slate-500">
-                    {CATEGORY_LABEL[expense.category]}
-                    {expense.receipt_name ? ` · ${expense.receipt_name}` : ""}
-                  </p>
-                </td>
-                <td className="px-5 py-3 text-slate-600">
-                  {nameById.get(expense.paid_by) ?? "Someone"}
-                  <p className="text-xs text-slate-400">
-                    {expense.shared ? "split" : "personal"}
-                  </p>
-                </td>
-                <td className="px-5 py-3 text-slate-600">{expense.spent_on}</td>
-                <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                  {formatMoney(expense.amount_cents, currency)}
-                </td>
-                <td className="px-5 py-3 text-right">
-                  {editable && (
-                    <form action={deleteExpenseAction}>
-                      <input type="hidden" name="expense_id" value={expense.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-slate-400 hover:text-rose-600"
-                        aria-label={`Delete ${expense.description}`}
-                      >
-                        Delete
-                      </button>
-                    </form>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </TableShell>
+          <ul className="divide-y divide-stone-100">
+            {expenses.map((expense) => {
+              const participants = expense.participant_ids;
+              return (
+                <li
+                  key={expense.id}
+                  className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-stone-900">{expense.description}</p>
+                    <p className="text-xs text-stone-500">
+                      {CATEGORY_LABEL[expense.category]} · {formatDate(expense.spent_on)} · payé par{" "}
+                      {nameById.get(expense.paid_by) ?? "quelqu'un"}
+                    </p>
+                    <p className="mt-1">
+                      {expense.shared ? (
+                        <Badge className="bg-brand-50 text-brand-700 ring-brand-200">
+                          {participants
+                            ? `partagée entre ${participants
+                                .map((userId) => nameById.get(userId) ?? "?")
+                                .join(", ")}`
+                            : "partagée entre tous"}
+                        </Badge>
+                      ) : (
+                        <Badge>personnelle</Badge>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="tabular-nums text-stone-800">
+                      {formatMoney(expense.amount_cents, currency)}
+                    </p>
+                    {editable && (
+                      <form action={deleteExpenseAction}>
+                        <input type="hidden" name="expense_id" value={expense.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-stone-400 hover:text-rose-600"
+                          aria-label={`Supprimer ${expense.description}`}
+                        >
+                          Supprimer
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
 
         {editable && (
-          <details className="border-t border-slate-100">
-            <summary className="cursor-pointer select-none px-5 py-3 text-sm font-medium text-brand-600 hover:text-brand-700">
-              Log an expense
+          <details className="border-t border-stone-100">
+            <summary className="cursor-pointer select-none px-5 py-3.5 text-sm font-semibold text-brand-700 hover:text-brand-800">
+              Noter une dépense
             </summary>
             <ExpenseForm
               tripId={trip.id}
@@ -386,35 +455,44 @@ export default async function TripPage({
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card title="Who's coming">
-          <ul className="divide-y divide-slate-100">
+        <Card title="Qui vient">
+          <ul className="divide-y divide-stone-100">
             {members.map((member) => (
-              <li key={member.user_id} className="flex items-center justify-between gap-3 px-5 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">
-                    {member.name}
-                    {member.user_id === user.id && (
-                      <span className="ml-1.5 text-xs text-slate-400">you</span>
-                    )}
-                  </p>
-                  <p className="truncate text-xs text-slate-500">{member.email}</p>
+              <li
+                key={member.user_id}
+                className="flex items-center justify-between gap-3 px-5 py-3.5"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-stone-100 text-xs font-semibold text-stone-600">
+                    {initials(member.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-900">
+                      {member.name}
+                      {member.user_id === user.id && (
+                        <span className="ml-1.5 text-xs text-stone-400">vous</span>
+                      )}
+                    </p>
+                    <p className="truncate text-xs text-stone-500">{member.email}</p>
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-3">
                   <Badge
                     className={
                       member.role === "owner"
                         ? "bg-brand-50 text-brand-700 ring-brand-200"
-                        : "bg-slate-100 text-slate-600 ring-slate-200"
+                        : "bg-stone-100 text-stone-600 ring-stone-200"
                     }
                   >
-                    {member.role === "owner" ? "organiser" : "companion"}
+                    {member.role === "owner" ? "organisateur" : "compagnon"}
                   </Badge>
                   {isOwner && member.role !== "owner" && (
                     <form action={removeCompanionAction}>
                       <input type="hidden" name="trip_id" value={trip.id} />
                       <input type="hidden" name="user_id" value={member.user_id} />
-                      <button type="submit" className="text-xs text-slate-400 hover:text-rose-600">
-                        Remove
+                      <button type="submit" className="text-xs text-stone-400 hover:text-rose-600">
+                        Retirer
                       </button>
                     </form>
                   )}
@@ -425,21 +503,21 @@ export default async function TripPage({
           {isOwner && editable && <CompanionForm tripId={trip.id} />}
         </Card>
 
-        <Card title="Settling up">
+        <Card title="Qui doit quoi">
           {expenses.length === 0 || members.length < 2 ? (
             <EmptyState
-              title="Nothing to settle"
-              hint="Once shared expenses are logged, the fewest payments to square up show here."
+              title="Rien à régler"
+              hint="Dès qu'une dépense partagée est notée, le décompte apparaît ici."
             />
           ) : (
             <>
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-stone-100">
                 {balances.map((balance) => (
                   <li
                     key={balance.user_id}
-                    className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm"
+                    className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
                   >
-                    <span className="text-slate-700">{balance.name}</span>
+                    <span className="text-stone-700">{balance.name}</span>
                     <span className="text-right">
                       <span
                         className={`tabular-nums ${
@@ -447,17 +525,17 @@ export default async function TripPage({
                             ? "text-emerald-700"
                             : balance.net_cents < 0
                               ? "text-rose-700"
-                              : "text-slate-500"
+                              : "text-stone-500"
                         }`}
                       >
                         {balance.net_cents === 0
-                          ? "square"
+                          ? "à jour"
                           : balance.net_cents > 0
-                            ? `is owed ${formatMoney(balance.net_cents, currency)}`
-                            : `owes ${formatMoney(-balance.net_cents, currency)}`}
+                            ? `on lui doit ${formatMoney(balance.net_cents, currency)}`
+                            : `doit ${formatMoney(-balance.net_cents, currency)}`}
                       </span>
-                      <p className="text-xs text-slate-400">
-                        paid {formatMoney(balance.paid_cents, currency)} · share{" "}
+                      <p className="text-xs text-stone-400">
+                        a payé {formatMoney(balance.paid_cents, currency)} · part{" "}
                         {formatMoney(balance.share_cents, currency)}
                       </p>
                     </span>
@@ -466,20 +544,22 @@ export default async function TripPage({
               </ul>
 
               {transfers.length > 0 && (
-                <div className="border-t border-slate-100 px-5 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Fewest payments
+                <div className="border-t border-stone-100 bg-stone-50 px-5 py-3.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                    Pour être quittes
                   </p>
-                  <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                  <ul className="mt-2 space-y-1 text-sm text-stone-700">
                     {transfers.map((transfer) => (
                       <li key={`${transfer.from_user_id}-${transfer.to_user_id}`}>
-                        {transfer.from_name} → {transfer.to_name}:{" "}
+                        {transfer.from_name} → {transfer.to_name} :{" "}
                         <strong>{formatMoney(transfer.amount_cents, currency)}</strong>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
+
+              <ShareSummary text={summaryText} />
             </>
           )}
         </Card>

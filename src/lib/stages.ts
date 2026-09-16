@@ -39,16 +39,19 @@ export function checkStageChange(
   action: StageAction,
   role: MemberRole | null,
 ): StageCheck {
-  if (!role) return { allowed: false, reason: "You are not on this trip." };
+  if (!role) return { allowed: false, reason: "Vous ne faites pas partie de ce voyage." };
 
   const rule = RULES[action];
-  if (!rule) return { allowed: false, reason: `Unknown action "${action}".` };
+  if (!rule) return { allowed: false, reason: `Action inconnue : « ${action} ».` };
 
   if (!rule.from.includes(trip.stage)) {
-    return { allowed: false, reason: `That does not apply to a trip that is ${STAGE_LABEL[trip.stage].toLowerCase()}.` };
+    return {
+      allowed: false,
+      reason: `Impossible sur un voyage au statut « ${STAGE_LABEL[trip.stage].toLowerCase()} ».`,
+    };
   }
   if (!rule.roles.includes(role)) {
-    return { allowed: false, reason: "Only the person who created the trip can do that." };
+    return { allowed: false, reason: "Seule la personne qui a créé le voyage peut faire ça." };
   }
 
   return { allowed: true, nextStage: rule.to };
@@ -64,28 +67,28 @@ export function availableStageActions(
 }
 
 export const STAGE_LABEL: Record<TripStage, string> = {
-  idea: "Idea",
-  planning: "Planning",
-  booked: "Booked",
-  travelling: "On the road",
-  completed: "Completed",
-  cancelled: "Cancelled",
+  idea: "Idée",
+  planning: "En préparation",
+  booked: "Réservé",
+  travelling: "En voyage",
+  completed: "Terminé",
+  cancelled: "Annulé",
 };
 
 export const STAGE_TONE: Record<TripStage, string> = {
-  idea: "bg-slate-100 text-slate-700 ring-slate-200",
+  idea: "bg-stone-100 text-stone-600 ring-stone-200",
   planning: "bg-amber-50 text-amber-700 ring-amber-200",
   booked: "bg-brand-50 text-brand-700 ring-brand-200",
   travelling: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  completed: "bg-sky-50 text-sky-700 ring-sky-200",
-  cancelled: "bg-slate-100 text-slate-500 ring-slate-200",
+  completed: "bg-stone-100 text-stone-600 ring-stone-200",
+  cancelled: "bg-stone-100 text-stone-400 ring-stone-200",
 };
 
 export const STAGE_ACTION_LABEL: Record<StageAction, string> = {
-  start_planning: "Start planning",
-  mark_booked: "Everything is booked",
-  start_trip: "We're off",
-  complete: "Trip finished",
-  cancel: "Cancel trip",
-  reopen: "Plan it again",
+  start_planning: "Passer en préparation",
+  mark_booked: "Tout est réservé",
+  start_trip: "C'est parti !",
+  complete: "Voyage terminé",
+  cancel: "Annuler le voyage",
+  reopen: "Le reprendre",
 };

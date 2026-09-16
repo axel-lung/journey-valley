@@ -48,6 +48,9 @@ export function seedIfEmpty(db: Database.Database): void {
                              shared, receipt_name)
        VALUES (@trip, @paid_by, @category, @description, @spent_on, @amount, @shared, @receipt)`,
     );
+    const insertChecklist = db.prepare(
+      `INSERT INTO checklist_items (trip_id, label, done, position) VALUES (?, ?, ?, ?)`,
+    );
     const insertActivity = db.prepare(
       `INSERT INTO activity_log (trip_id, actor_id, action, detail, created_at)
        VALUES (?, ?, ?, ?, ?)`,
@@ -105,6 +108,10 @@ export function seedIfEmpty(db: Database.Database): void {
         });
       }
 
+      (spec.checklist ?? []).forEach((item, index) => {
+        insertChecklist.run(tripId, item.label, item.done ? 1 : 0, index);
+      });
+
       insertActivity.run(tripId, ownerId, `trip.${spec.stage}`, spec.title, day(-15));
     }
   });
@@ -143,8 +150,14 @@ interface DemoExpense {
   receipt_name?: string;
 }
 
+interface DemoChecklistItem {
+  label: string;
+  done?: boolean;
+}
+
 interface DemoTrip {
   owner: Person;
+  checklist?: DemoChecklistItem[];
   companions?: Person[];
   title: string;
   summary: string;
@@ -164,9 +177,9 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
     {
       owner: "camille",
       companions: ["sam"],
-      title: "Lisbon long weekend",
-      summary: "Four days of pastéis, tiles and the tram up to Graça.",
-      city: "Lisbon",
+      title: "Week-end à Lisbonne",
+      summary: "Quatre jours de pastéis, d'azulejos et le tram jusqu'à Graça.",
+      city: "Lisbonne",
       country: "Portugal",
       start: d(-96),
       end: d(-92),
@@ -177,7 +190,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           type: "flight",
           vendor: "TAP",
           reference: "TP1043",
-          description: "LYS → LIS return, two seats",
+          description: "LYS → LIS aller-retour, deux places",
           start_at: d(-96),
           end_at: d(-92),
           amount_cents: 24_600,
@@ -186,7 +199,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         {
           type: "stay",
           vendor: "Alfama apartment",
-          description: "4 nights, whole flat",
+          description: "4 nuits, appartement entier",
           start_at: d(-96),
           end_at: d(-92),
           amount_cents: 32_800,
@@ -195,26 +208,33 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         },
         {
           type: "activity",
-          vendor: "Time Out Market food tour",
+          vendor: "Visite gourmande du Time Out Market",
           start_at: d(-94),
           amount_cents: 9_000,
           agency_quote_cents: 13_000,
         },
       ],
       expenses: [
-        { paid_by: "camille", category: "food", description: "Dinner in Bairro Alto", spent_on: d(-95), amount_cents: 6_400, receipt_name: "bairro-alto.jpg" },
-        { paid_by: "sam", category: "transport", description: "Tram passes", spent_on: d(-95), amount_cents: 2_400 },
+        { paid_by: "camille", category: "food", description: "Dîner au Bairro Alto", spent_on: d(-95), amount_cents: 6_400, receipt_name: "bairro-alto.jpg" },
+        { paid_by: "sam", category: "transport", description: "Forfaits tram", spent_on: d(-95), amount_cents: 2_400 },
         { paid_by: "sam", category: "food", description: "Pastéis de Belém", spent_on: d(-94), amount_cents: 1_150 },
-        { paid_by: "camille", category: "shopping", description: "Tiles for the kitchen", spent_on: d(-93), amount_cents: 4_800, shared: false },
+        { paid_by: "camille", category: "shopping", description: "Azulejos pour la cuisine", spent_on: d(-93), amount_cents: 4_800, shared: false },
       ],
     },
     {
       owner: "camille",
       companions: ["sam", "noor"],
-      title: "Norway fjords road trip",
-      summary: "Bergen to Ålesund by hire car, five stops, no tour bus.",
+      title: "Road trip dans les fjords norvégiens",
+      summary: "Bergen → Ålesund en voiture de location, cinq étapes, sans car de tourisme.",
       city: "Bergen",
-      country: "Norway",
+      country: "Norvège",
+      checklist: [
+        { label: "Permis de conduire international", done: true },
+        { label: "Réserver le ferry de Geiranger", done: true },
+        { label: "Chaînes neige : vérifier si incluses", done: false },
+        { label: "Télécharger les cartes hors-ligne", done: false },
+        { label: "Prévoir une multiprise adaptateur", done: false },
+      ],
       start: d(26),
       end: d(35),
       stage: "booked",
@@ -226,7 +246,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           type: "flight",
           vendor: "Norwegian",
           reference: "DY1451",
-          description: "LYS → BGO return, three seats",
+          description: "LYS → BGO aller-retour, trois places",
           start_at: d(26),
           end_at: d(35),
           amount_cents: 62_400,
@@ -234,15 +254,15 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         {
           type: "transport",
           vendor: "Hertz",
-          description: "Estate car, 9 days, unlimited km",
+          description: "Break, 9 jours, kilométrage illimité",
           start_at: d(26),
           end_at: d(35),
           amount_cents: 47_800,
         },
         {
           type: "stay",
-          vendor: "Fjord cabins (4 stops)",
-          description: "9 nights across Bergen, Flåm, Geiranger, Ålesund",
+          vendor: "Chalets des fjords (4 étapes)",
+          description: "9 nuits entre Bergen, Flåm, Geiranger et Ålesund",
           start_at: d(26),
           end_at: d(35),
           amount_cents: 78_500,
@@ -250,22 +270,27 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         },
         {
           type: "activity",
-          vendor: "Nærøyfjord ferry",
+          vendor: "Ferry du Nærøyfjord",
           start_at: d(29),
           amount_cents: 11_400,
         },
       ],
       expenses: [
-        { paid_by: "camille", category: "other", description: "Travel insurance, three people", spent_on: d(-4), amount_cents: 8_700 },
+        { paid_by: "camille", category: "other", description: "Assurance voyage, trois personnes", spent_on: d(-4), amount_cents: 8_700 },
       ],
     },
     {
       owner: "sam",
       companions: ["camille"],
-      title: "Kyoto in autumn",
-      summary: "Two weeks chasing the maple season, rail pass instead of a tour.",
+      title: "Kyoto en automne",
+      summary: "Deux semaines à courir après les érables, Rail Pass plutôt qu'un circuit organisé.",
       city: "Kyoto",
-      country: "Japan",
+      country: "Japon",
+      checklist: [
+        { label: "Commander le Japan Rail Pass", done: false },
+        { label: "Vérifier la validité du passeport", done: true },
+        { label: "Assurance santé à l'étranger", done: false },
+      ],
       start: d(112),
       end: d(126),
       stage: "planning",
@@ -275,7 +300,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         {
           type: "flight",
           vendor: "ANA",
-          description: "CDG → KIX return, two seats",
+          description: "CDG → KIX aller-retour, deux places",
           start_at: d(112),
           end_at: d(126),
           amount_cents: 148_000,
@@ -286,10 +311,10 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
     {
       owner: "noor",
       companions: ["camille"],
-      title: "Andalusia by train",
-      summary: "Seville, Córdoba, Granada — trains only, no flights.",
-      city: "Seville",
-      country: "Spain",
+      title: "L'Andalousie en train",
+      summary: "Séville, Cordoue, Grenade — que du train, aucun avion.",
+      city: "Séville",
+      country: "Espagne",
       start: d(160),
       end: d(168),
       stage: "idea",
@@ -297,10 +322,10 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
     },
     {
       owner: "camille",
-      title: "Dolomites hiking week",
-      summary: "Alta Via 1, huts booked one by one instead of a guided package.",
+      title: "Une semaine de rando dans les Dolomites",
+      summary: "Alta Via 1, refuges réservés un par un plutôt qu'un séjour guidé.",
       city: "Cortina d'Ampezzo",
-      country: "Italy",
+      country: "Italie",
       start: d(-320),
       end: d(-313),
       stage: "completed",
@@ -309,15 +334,15 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
       bookings: [
         {
           type: "transport",
-          vendor: "Flixbus + regional rail",
+          vendor: "Flixbus + trains régionaux",
           start_at: d(-320),
           end_at: d(-313),
           amount_cents: 14_200,
         },
         {
           type: "stay",
-          vendor: "Rifugi half-board (6 huts)",
-          description: "7 nights, dinner and breakfast included",
+          vendor: "Refuges en demi-pension (6 étapes)",
+          description: "7 nuits, dîner et petit-déjeuner compris",
           start_at: d(-320),
           end_at: d(-313),
           amount_cents: 61_600,
@@ -325,8 +350,8 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
         },
       ],
       expenses: [
-        { paid_by: "camille", category: "food", description: "Trail lunches", spent_on: d(-317), amount_cents: 5_200 },
-        { paid_by: "camille", category: "activities", description: "Cable car down from Lagazuoi", spent_on: d(-314), amount_cents: 2_100 },
+        { paid_by: "camille", category: "food", description: "Déjeuners sur les sentiers", spent_on: d(-317), amount_cents: 5_200 },
+        { paid_by: "camille", category: "activities", description: "Téléphérique à la descente du Lagazuoi", spent_on: d(-314), amount_cents: 2_100 },
       ],
     },
   ];

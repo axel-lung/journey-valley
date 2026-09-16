@@ -15,20 +15,20 @@ describe("checkStageChange", () => {
   it("refuses a step that skips the current stage", () => {
     const result = checkStageChange(trip("idea"), "start_trip", "owner");
     expect(result.allowed).toBe(false);
-    expect(result.reason).toMatch(/does not apply/i);
+    expect(result.reason).toMatch(/impossible sur un voyage/i);
   });
 
   it("lets a companion mark things booked but not cancel the trip", () => {
     expect(checkStageChange(trip("planning"), "mark_booked", "companion").allowed).toBe(true);
     const cancel = checkStageChange(trip("planning"), "cancel", "companion");
     expect(cancel.allowed).toBe(false);
-    expect(cancel.reason).toMatch(/person who created the trip/i);
+    expect(cancel.reason).toMatch(/personne qui a créé le voyage/i);
   });
 
   it("refuses anyone who is not on the trip", () => {
     const result = checkStageChange(trip("planning"), "mark_booked", null);
     expect(result.allowed).toBe(false);
-    expect(result.reason).toMatch(/not on this trip/i);
+    expect(result.reason).toMatch(/ne faites pas partie/i);
   });
 
   it("can revive a cancelled or completed trip as planning", () => {

@@ -112,8 +112,18 @@ export function migrate(db: Database.Database): void {
       spent_on     TEXT NOT NULL,
       amount_cents INTEGER NOT NULL DEFAULT 0,
       shared       INTEGER NOT NULL DEFAULT 1 CHECK (shared IN (0,1)),
+      participant_ids TEXT,
       receipt_name TEXT,
       created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS checklist_items (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id    INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      label      TEXT NOT NULL,
+      done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0,1)),
+      position   INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -131,7 +141,24 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_activity_trip ON activity_log(trip_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_checklist_trip ON checklist_items(trip_id, position, id);
   `);
+
+  // Columns added after the first release. `CREATE TABLE IF NOT EXISTS` leaves
+  // an existing table alone, so new columns need adding by hand.
+  addColumn(db, "expenses", "participant_ids", "TEXT");
+}
+
+/** Adds a column only when the table does not already have it. */
+function addColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = db.prepare<[], { name: string }>(`PRAGMA table_info(${table})`).all();
+  if (columns.some((entry) => entry.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export function recordActivity(params: {

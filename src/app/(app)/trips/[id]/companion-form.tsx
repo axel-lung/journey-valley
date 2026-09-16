@@ -9,7 +9,7 @@ export function CompanionForm({ tripId }: { tripId: number }) {
   const [state, action] = useActionState<FormState, FormData>(addCompanionAction, {});
 
   return (
-    <form action={action} className="space-y-3 border-t border-slate-100 px-5 py-4">
+    <form action={action} className="space-y-3 border-t border-stone-100 px-5 py-4">
       <input type="hidden" name="trip_id" value={tripId} />
       <ErrorNotice message={state.error ?? state.fieldErrors?.email} />
 
@@ -18,13 +18,14 @@ export function CompanionForm({ tripId }: { tripId: number }) {
           name="email"
           type="email"
           required
-          placeholder="their@email.com"
+          placeholder="son@email.com"
           className={`${inputClass} sm:w-64`}
         />
-        <SubmitButton pendingLabel="Adding…">Add companion</SubmitButton>
+        <SubmitButton pendingLabel="Ajout…">Inviter</SubmitButton>
       </div>
-      <p className="text-xs text-slate-500">
-        They see the trip, can add bookings and expenses, and are included when costs are split.
+      <p className="text-xs leading-relaxed text-stone-500">
+        La personne voit le voyage, peut ajouter réservations et dépenses, et compte dans le
+        partage des frais.
       </p>
     </form>
   );

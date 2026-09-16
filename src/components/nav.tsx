@@ -22,10 +22,10 @@ export function Nav({ items }: { items: NavItem[] }) {
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
+            className={`flex items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition ${
               active
                 ? "bg-brand-50 text-brand-700"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
             }`}
           >
             <span aria-hidden className="w-4 text-center text-base leading-none">

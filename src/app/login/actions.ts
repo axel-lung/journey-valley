@@ -10,8 +10,8 @@ export interface AuthState {
 }
 
 const credentials = z.object({
-  email: z.string().trim().min(1, "Enter your email."),
-  password: z.string().min(1, "Enter your password."),
+  email: z.string().trim().min(1, "Indiquez votre e-mail."),
+  password: z.string().min(1, "Indiquez votre mot de passe."),
 });
 
 export async function loginAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -20,12 +20,12 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
     password: formData.get("password"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Check your details and try again." };
+    return { error: parsed.error.issues[0]?.message ?? "Vérifiez vos informations et réessayez." };
   }
 
   const user = authenticate(parsed.data.email, parsed.data.password);
   if (!user) {
-    return { error: "That email and password combination does not match an account." };
+    return { error: "Cet e-mail et ce mot de passe ne correspondent à aucun compte." };
   }
 
   await createSession(user.id);
@@ -33,9 +33,9 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
 }
 
 const signupSchema = z.object({
-  name: z.string().trim().min(2, "What should we call you?"),
-  email: z.email("Enter a valid email address."),
-  password: z.string().min(8, "Use at least 8 characters."),
+  name: z.string().trim().min(2, "Comment vous appelez-vous ?"),
+  email: z.email("Indiquez une adresse e-mail valide."),
+  password: z.string().min(8, "Au moins 8 caractères."),
   home_city: z.string().trim().max(80).default(""),
   currency: z.enum(["EUR", "USD", "GBP", "CHF"]).default("EUR"),
 });
@@ -43,7 +43,7 @@ const signupSchema = z.object({
 export async function signupAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = signupSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Check your details and try again." };
+    return { error: parsed.error.issues[0]?.message ?? "Vérifiez vos informations et réessayez." };
   }
 
   let userId: number;
@@ -58,7 +58,7 @@ export async function signupAction(_prev: AuthState, formData: FormData): Promis
     userId = user.id;
   } catch (error) {
     if (error instanceof EmailTakenError) {
-      return { error: "That email already has an account — sign in instead." };
+      return { error: "Un compte existe déjà avec cet e-mail — connectez-vous." };
     }
     throw error;
   }

@@ -6,24 +6,31 @@ import { ErrorNotice, Field, inputClass } from "@/components/ui";
 import { loginAction, signupAction, type AuthState } from "./actions";
 
 const fullWidthButton =
-  "w-full justify-center rounded-lg bg-brand-600 px-3.5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60";
+  "w-full justify-center rounded-xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-60";
 
 export function AuthForms({ demoEmail }: { demoEmail: string }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
 
   return (
     <div>
-      <div className="flex rounded-lg bg-slate-100 p-1 text-sm font-medium">
-        {(["signin", "signup"] as const).map((entry) => (
+      <div className="flex rounded-xl bg-stone-100 p-1 text-sm font-medium">
+        {(
+          [
+            { key: "signin", label: "J'ai un compte" },
+            { key: "signup", label: "Je m'inscris" },
+          ] as const
+        ).map((entry) => (
           <button
-            key={entry}
+            key={entry.key}
             type="button"
-            onClick={() => setMode(entry)}
-            className={`flex-1 rounded-md px-3 py-1.5 transition ${
-              mode === entry ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            onClick={() => setMode(entry.key)}
+            className={`flex-1 rounded-lg px-3 py-2 transition ${
+              mode === entry.key
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-500 hover:text-stone-800"
             }`}
           >
-            {entry === "signin" ? "Sign in" : "Create account"}
+            {entry.label}
           </button>
         ))}
       </div>
@@ -42,7 +49,7 @@ function SignInForm({ demoEmail }: { demoEmail: string }) {
     <form action={action} className="space-y-4">
       <ErrorNotice message={state.error} />
 
-      <Field label="Email">
+      <Field label="E-mail">
         <input
           name="email"
           type="email"
@@ -53,7 +60,7 @@ function SignInForm({ demoEmail }: { demoEmail: string }) {
         />
       </Field>
 
-      <Field label="Password">
+      <Field label="Mot de passe">
         <input
           name="password"
           type="password"
@@ -64,8 +71,8 @@ function SignInForm({ demoEmail }: { demoEmail: string }) {
         />
       </Field>
 
-      <SubmitButton className={fullWidthButton} pendingLabel="Signing in…">
-        Sign in
+      <SubmitButton className={fullWidthButton} pendingLabel="Connexion…">
+        Se connecter
       </SubmitButton>
     </form>
   );
@@ -78,15 +85,15 @@ function SignUpForm() {
     <form action={action} className="space-y-4">
       <ErrorNotice message={state.error} />
 
-      <Field label="Your name">
+      <Field label="Votre prénom et nom">
         <input name="name" required autoComplete="name" placeholder="Camille Dupont" className={inputClass} />
       </Field>
 
-      <Field label="Email">
+      <Field label="E-mail">
         <input name="email" type="email" required autoComplete="username" className={inputClass} />
       </Field>
 
-      <Field label="Password" hint="At least 8 characters.">
+      <Field label="Mot de passe" hint="Au moins 8 caractères.">
         <input
           name="password"
           type="password"
@@ -98,10 +105,10 @@ function SignUpForm() {
       </Field>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Home city">
+        <Field label="Ville de départ">
           <input name="home_city" placeholder="Lyon" className={inputClass} />
         </Field>
-        <Field label="Currency">
+        <Field label="Devise">
           <select name="currency" defaultValue="EUR" className={inputClass}>
             <option value="EUR">EUR €</option>
             <option value="USD">USD $</option>
@@ -111,11 +118,12 @@ function SignUpForm() {
         </Field>
       </div>
 
-      <SubmitButton className={fullWidthButton} pendingLabel="Creating…">
-        Create my free account
+      <SubmitButton className={fullWidthButton} pendingLabel="Création…">
+        Créer mon compte gratuit
       </SubmitButton>
-      <p className="text-xs text-slate-500">
-        Free plan, no card. Two active trips and one companion — upgrade later if you travel more.
+      <p className="text-xs leading-relaxed text-stone-500">
+        Forfait Découverte, sans carte bancaire. Deux voyages en cours et un compagnon — vous
+        passerez à Plus si vous partez plus souvent.
       </p>
     </form>
   );

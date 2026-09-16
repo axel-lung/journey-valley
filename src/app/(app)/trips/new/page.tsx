@@ -14,28 +14,25 @@ export default async function NewTripPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <header>
-        <Link href="/trips" className="text-sm text-slate-500 hover:text-slate-900">
-          ← Back to trips
+        <Link href="/trips" className="text-sm text-stone-500 hover:text-stone-900">
+          ← Retour aux voyages
         </Link>
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">Plan a trip</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Only the name and where you are going are required — everything else can wait.
+        <h1 className="mt-2 text-2xl font-semibold text-stone-900">Un nouveau voyage</h1>
+        <p className="mt-1.5 text-sm text-stone-500">
+          Seuls le nom et la destination sont obligatoires. Le reste peut attendre.
         </p>
       </header>
 
       {!limit.allowed ? (
-        <Card title="You have reached your plan's limit">
-          <div className="space-y-3 px-5 py-5 text-sm text-slate-700">
+        <Card title="Vous avez atteint la limite de votre forfait">
+          <div className="space-y-3 px-5 py-5 text-sm text-stone-700">
             <p>{limit.reason}</p>
-            <p className="text-slate-500">
-              {plan.name} keeps {plan.max_active_trips} trips active at a time. Completing a trip
-              frees a slot, and Plus removes the limit entirely.
+            <p className="text-stone-500">
+              {plan.name} garde {plan.max_active_trips} voyages en cours à la fois. Terminer un
+              voyage libère une place, et Plus enlève la limite.
             </p>
-            <Link
-              href="/account"
-              className="inline-block font-medium text-brand-600 hover:underline"
-            >
-              Compare the plans →
+            <Link href="/account" className="inline-block font-semibold text-brand-600 hover:underline">
+              Comparer les forfaits →
             </Link>
           </div>
         </Card>

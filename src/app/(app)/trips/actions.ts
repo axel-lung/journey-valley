@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { getDb, recordActivity } from "@/lib/db";
 import { parseAmountToCents } from "@/lib/money";
+import { CHECKLIST_TEMPLATE } from "@/lib/checklist";
 import { canAddCompanion, canCreateTrip } from "@/lib/plans";
 import { checkStageChange, type StageAction } from "@/lib/stages";
 import {
@@ -14,6 +15,7 @@ import {
   getTrip,
   listMembers,
   membershipRole,
+  serialiseParticipants,
 } from "@/lib/trips";
 
 export interface FormState {
@@ -22,14 +24,14 @@ export interface FormState {
   ok?: boolean;
 }
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date.");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Indiquez une date valide.");
 
 const tripSchema = z
   .object({
-    title: z.string().trim().min(3, "Give the trip a name you'll recognise."),
+    title: z.string().trim().min(3, "Donnez-lui un nom que vous reconnaîtrez."),
     summary: z.string().trim().max(500).default(""),
-    destination_city: z.string().trim().min(1, "Where are you going?"),
-    destination_country: z.string().trim().min(1, "Which country?"),
+    destination_city: z.string().trim().min(1, "Vous allez où ?"),
+    destination_country: z.string().trim().min(1, "Dans quel pays ?"),
     start_date: isoDate,
     end_date: isoDate,
     budget: z.string().trim().default(""),
@@ -37,7 +39,7 @@ const tripSchema = z
     travellers: z.coerce.number().int().min(1).max(20).default(1),
   })
   .refine((value) => value.end_date >= value.start_date, {
-    message: "The return date cannot be before you leave.",
+    message: "Le retour ne peut pas précéder le départ.",
     path: ["end_date"],
   });
 
@@ -57,11 +59,13 @@ export async function createTripAction(_prev: FormState, formData: FormData): Pr
   if (!parsed.success) return toFormState(parsed.error);
 
   const budget = optionalAmount(parsed.data.budget);
-  if (budget === null) return { fieldErrors: { budget: "Enter an amount such as 1 200 or 1200.50." } };
+  if (budget === null) {
+    return { fieldErrors: { budget: "Un montant comme 1 200 ou 1200,50." } };
+  }
 
   const quote = optionalAmount(parsed.data.agency_quote);
   if (quote === null) {
-    return { fieldErrors: { agency_quote: "Enter an amount such as 2 400, or leave it blank." } };
+    return { fieldErrors: { agency_quote: "Un montant comme 2 400, ou laissez vide." } };
   }
 
   const db = getDb();
@@ -95,12 +99,7 @@ export async function createTripAction(_prev: FormState, formData: FormData): Pr
     return id;
   })();
 
-  recordActivity({
-    tripId,
-    actorId: user.id,
-    action: "trip.created",
-    detail: parsed.data.title,
-  });
+  recordActivity({ tripId, actorId: user.id, action: "trip.created", detail: parsed.data.title });
 
   revalidatePath("/trips");
   revalidatePath("/dashboard");
@@ -118,7 +117,7 @@ export async function changeStageAction(formData: FormData): Promise<void> {
 
   const check = checkStageChange(trip, action, role);
   if (!check.allowed || !check.nextStage) {
-    redirect(`/trips/${tripId}?error=${encodeURIComponent(check.reason ?? "Not allowed.")}`);
+    redirect(`/trips/${tripId}?error=${encodeURIComponent(check.reason ?? "Action impossible.")}`);
   }
 
   getDb().prepare(`UPDATE trips SET stage = ? WHERE id = ?`).run(check.nextStage, tripId);
@@ -132,17 +131,18 @@ export async function changeStageAction(formData: FormData): Promise<void> {
   revalidatePath(`/trips/${tripId}`);
   revalidatePath("/trips");
   revalidatePath("/dashboard");
+  revalidatePath("/savings");
 }
 
 const bookingSchema = z.object({
   trip_id: z.coerce.number().int().positive(),
   type: z.enum(["flight", "stay", "activity", "transport", "other"]),
-  vendor: z.string().trim().min(1, "Who are you booking with?"),
+  vendor: z.string().trim().min(1, "Réservé chez qui ?"),
   reference: z.string().trim().max(60).optional(),
   description: z.string().trim().max(300).default(""),
   start_at: isoDate,
   end_at: z.string().optional(),
-  amount: z.string().trim().min(1, "What did it cost?"),
+  amount: z.string().trim().min(1, "Combien avez-vous payé ?"),
   agency_quote: z.string().trim().default(""),
   nights: z.string().optional(),
 });
@@ -155,15 +155,17 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
 
   const trip = getTrip(parsed.data.trip_id);
   const role = membershipRole(user.id, parsed.data.trip_id);
-  if (!trip || !role) return { error: "That trip is not yours." };
-  if (trip.stage === "cancelled") return { error: "This trip is cancelled." };
+  if (!trip || !role) return { error: "Ce voyage ne vous appartient pas." };
+  if (trip.stage === "cancelled") return { error: "Ce voyage est annulé." };
 
   const amount = parseAmountToCents(parsed.data.amount);
-  if (amount === null) return { fieldErrors: { amount: "Enter an amount such as 246 or 245,90." } };
+  if (amount === null) {
+    return { fieldErrors: { amount: "Un montant comme 246 ou 245,90." } };
+  }
 
   const quote = optionalAmount(parsed.data.agency_quote);
   if (quote === null) {
-    return { fieldErrors: { agency_quote: "Enter an amount, or leave it blank." } };
+    return { fieldErrors: { agency_quote: "Un montant, ou laissez vide." } };
   }
 
   const nights =
@@ -193,7 +195,7 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
     tripId: trip.id,
     actorId: user.id,
     action: "booking.added",
-    detail: `${parsed.data.vendor} (${parsed.data.type})`,
+    detail: parsed.data.vendor,
   });
 
   revalidatePath(`/trips/${trip.id}`);
@@ -212,8 +214,7 @@ export async function deleteBookingAction(formData: FormData): Promise<void> {
       `SELECT trip_id, vendor FROM bookings WHERE id = ?`,
     )
     .get(bookingId);
-  if (!row) redirect("/trips");
-  if (!membershipRole(user.id, row.trip_id)) redirect("/trips");
+  if (!row || !membershipRole(user.id, row.trip_id)) redirect("/trips");
 
   db.prepare(`DELETE FROM bookings WHERE id = ?`).run(bookingId);
   recordActivity({
@@ -231,9 +232,9 @@ export async function deleteBookingAction(formData: FormData): Promise<void> {
 const expenseSchema = z.object({
   trip_id: z.coerce.number().int().positive(),
   category: z.enum(["food", "transport", "lodging", "activities", "shopping", "other"]),
-  description: z.string().trim().min(1, "What was it for?"),
+  description: z.string().trim().min(1, "C'était pour quoi ?"),
   spent_on: isoDate,
-  amount: z.string().trim().min(1, "How much was it?"),
+  amount: z.string().trim().min(1, "Combien ?"),
   shared: z.string().optional(),
   paid_by: z.coerce.number().int().positive().optional(),
   receipt_name: z.string().trim().max(120).optional(),
@@ -247,24 +248,35 @@ export async function addExpenseAction(_prev: FormState, formData: FormData): Pr
 
   const trip = getTrip(parsed.data.trip_id);
   if (!trip || !membershipRole(user.id, parsed.data.trip_id)) {
-    return { error: "That trip is not yours." };
+    return { error: "Ce voyage ne vous appartient pas." };
   }
 
   const amount = parseAmountToCents(parsed.data.amount);
-  if (amount === null) return { fieldErrors: { amount: "Enter an amount such as 24 or 23,80." } };
+  if (amount === null) {
+    return { fieldErrors: { amount: "Un montant comme 24 ou 23,80." } };
+  }
 
-  // You may record that a companion paid, but only for someone on the trip.
   const members = listMembers(trip.id);
+  const memberIds = new Set(members.map((member) => member.user_id));
+
+  // You may record that a companion paid, but only someone on the trip.
   const paidBy =
-    parsed.data.paid_by && members.some((member) => member.user_id === parsed.data.paid_by)
-      ? parsed.data.paid_by
-      : user.id;
+    parsed.data.paid_by && memberIds.has(parsed.data.paid_by) ? parsed.data.paid_by : user.id;
+
+  const shared = parsed.data.shared === "on";
+  // Checkboxes only submit what is ticked; an untouched form means "everyone".
+  const picked = formData
+    .getAll("participants")
+    .map((value) => Number(value))
+    .filter((id) => memberIds.has(id));
+  const participants =
+    shared && picked.length > 0 && picked.length < members.length ? picked : null;
 
   getDb()
     .prepare(
       `INSERT INTO expenses (trip_id, paid_by, category, description, spent_on, amount_cents,
-                             shared, receipt_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                             shared, participant_ids, receipt_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       trip.id,
@@ -273,7 +285,8 @@ export async function addExpenseAction(_prev: FormState, formData: FormData): Pr
       parsed.data.description,
       parsed.data.spent_on,
       amount,
-      parsed.data.shared === "on" ? 1 : 0,
+      shared ? 1 : 0,
+      serialiseParticipants(participants),
       parsed.data.receipt_name || null,
     );
 
@@ -317,7 +330,7 @@ export async function deleteExpenseAction(formData: FormData): Promise<void> {
 
 const companionSchema = z.object({
   trip_id: z.coerce.number().int().positive(),
-  email: z.email("Enter the email they signed up with."),
+  email: z.email("Indiquez l'e-mail de son compte."),
 });
 
 export async function addCompanionAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -328,7 +341,7 @@ export async function addCompanionAction(_prev: FormState, formData: FormData): 
 
   const trip = getTrip(parsed.data.trip_id);
   if (!trip || membershipRole(user.id, parsed.data.trip_id) !== "owner") {
-    return { error: "Only the person who created the trip can add companions." };
+    return { error: "Seule la personne qui a créé le voyage peut inviter." };
   }
 
   const members = listMembers(trip.id);
@@ -337,12 +350,10 @@ export async function addCompanionAction(_prev: FormState, formData: FormData): 
 
   const companion = findUserByEmail(parsed.data.email);
   if (!companion) {
-    return {
-      error: "Nobody with that email has an account yet — ask them to sign up first, it's free.",
-    };
+    return { error: "Personne n'a encore de compte avec cet e-mail — l'inscription est gratuite." };
   }
   if (members.some((member) => member.user_id === companion.id)) {
-    return { error: `${companion.name} is already on this trip.` };
+    return { error: `${companion.name} fait déjà partie du voyage.` };
   }
 
   const db = getDb();
@@ -385,6 +396,85 @@ export async function removeCompanionAction(formData: FormData): Promise<void> {
 
   recordActivity({ tripId, actorId: user.id, action: "companion.removed" });
   revalidatePath(`/trips/${tripId}`);
+}
+
+/* ------------------------------------------------------------- checklist */
+
+export async function addChecklistItemAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const tripId = Number(formData.get("trip_id"));
+  const label = String(formData.get("label") ?? "").trim().slice(0, 140);
+
+  if (!label || !membershipRole(user.id, tripId)) redirect(`/trips/${tripId}`);
+
+  const db = getDb();
+  const next = db
+    .prepare<[number], { position: number }>(
+      `SELECT COALESCE(MAX(position), -1) + 1 AS position FROM checklist_items WHERE trip_id = ?`,
+    )
+    .get(tripId)!.position;
+
+  db.prepare(`INSERT INTO checklist_items (trip_id, label, position) VALUES (?, ?, ?)`).run(
+    tripId,
+    label,
+    next,
+  );
+
+  revalidatePath(`/trips/${tripId}`);
+}
+
+export async function addChecklistTemplateAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const tripId = Number(formData.get("trip_id"));
+  if (!membershipRole(user.id, tripId)) redirect(`/trips/${tripId}`);
+
+  const db = getDb();
+  const existing = db
+    .prepare<[number], { label: string }>(`SELECT label FROM checklist_items WHERE trip_id = ?`)
+    .all(tripId)
+    .map((row) => row.label);
+
+  const insert = db.prepare(
+    `INSERT INTO checklist_items (trip_id, label, position) VALUES (?, ?, ?)`,
+  );
+  const start = existing.length;
+
+  // Adding the template twice must not double every line.
+  db.transaction(() => {
+    CHECKLIST_TEMPLATE.filter((label) => !existing.includes(label)).forEach((label, index) => {
+      insert.run(tripId, label, start + index);
+    });
+  })();
+
+  revalidatePath(`/trips/${tripId}`);
+}
+
+export async function toggleChecklistItemAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const itemId = Number(formData.get("item_id"));
+
+  const db = getDb();
+  const row = db
+    .prepare<[number], { trip_id: number }>(`SELECT trip_id FROM checklist_items WHERE id = ?`)
+    .get(itemId);
+  if (!row || !membershipRole(user.id, row.trip_id)) redirect("/trips");
+
+  db.prepare(`UPDATE checklist_items SET done = 1 - done WHERE id = ?`).run(itemId);
+  revalidatePath(`/trips/${row.trip_id}`);
+}
+
+export async function deleteChecklistItemAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const itemId = Number(formData.get("item_id"));
+
+  const db = getDb();
+  const row = db
+    .prepare<[number], { trip_id: number }>(`SELECT trip_id FROM checklist_items WHERE id = ?`)
+    .get(itemId);
+  if (!row || !membershipRole(user.id, row.trip_id)) redirect("/trips");
+
+  db.prepare(`DELETE FROM checklist_items WHERE id = ?`).run(itemId);
+  revalidatePath(`/trips/${row.trip_id}`);
 }
 
 function toFormState(error: z.ZodError): FormState {

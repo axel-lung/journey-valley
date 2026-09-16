@@ -1,10 +1,10 @@
 /**
- * Journey Valley for Android — the offline build.
+ * Journey Valley pour Android — version hors-ligne.
  *
- * Same product, one device: plan trips, record what you paid against what an
- * agency quoted, split costs with the people you travel with. The arithmetic
- * comes from the shared `budget.ts` and `stages.ts` modules, so the phone and
- * the web app can never disagree about a number.
+ * Même produit, un seul appareil : préparer ses voyages, noter ce qu'on a payé
+ * face au devis d'une agence, partager les frais avec ceux qui viennent. Les
+ * calculs viennent des modules partagés `budget.ts` et `stages.ts`, pour que le
+ * téléphone et le site ne puissent jamais donner deux chiffres différents.
  */
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,43 +15,52 @@ import {
   splitBalances,
   tripNights,
 } from "../../src/lib/budget";
+import { coverStyle } from "../../src/lib/cover";
+import {
+  countdown,
+  formatDate,
+  formatDateRange,
+  formatNights,
+  formatTravellers,
+  initials,
+} from "../../src/lib/format";
 import { formatMoney, parseAmountToCents, percentOf } from "../../src/lib/money";
 import {
   availableStageActions,
+  checkStageChange,
   STAGE_ACTION_LABEL,
   STAGE_LABEL,
   type StageAction,
 } from "../../src/lib/stages";
-import { checkStageChange } from "../../src/lib/stages";
-import type { BookingType, ExpenseCategory, Trip, TripStage } from "../../src/lib/types";
+import type { BookingType, ExpenseCategory, TripStage } from "../../src/lib/types";
 import * as store from "./store";
 
 const CURRENCY = store.CURRENCY;
 
 const STAGE_TONE: Record<TripStage, string> = {
-  idea: "bg-slate-100 text-slate-700",
+  idea: "bg-stone-100 text-stone-600",
   planning: "bg-amber-100 text-amber-800",
-  booked: "bg-blue-100 text-blue-800",
+  booked: "bg-brand-100 text-brand-800",
   travelling: "bg-emerald-100 text-emerald-800",
-  completed: "bg-sky-100 text-sky-800",
-  cancelled: "bg-slate-100 text-slate-500",
+  completed: "bg-stone-100 text-stone-600",
+  cancelled: "bg-stone-100 text-stone-400",
 };
 
 const BOOKING_LABEL: Record<BookingType, string> = {
-  flight: "Flight",
-  stay: "Stay",
+  flight: "Vol",
+  stay: "Logement",
   transport: "Transport",
-  activity: "Activity",
-  other: "Other",
+  activity: "Activité",
+  other: "Autre",
 };
 
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
-  food: "Food and drink",
-  transport: "Getting around",
-  lodging: "Stays",
-  activities: "Things to do",
-  shopping: "Shopping",
-  other: "Other",
+  food: "Nourriture et boissons",
+  transport: "Transports sur place",
+  lodging: "Hébergement",
+  activities: "Activités",
+  shopping: "Achats",
+  other: "Divers",
 };
 
 type Screen =
@@ -67,8 +76,7 @@ function App() {
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision((value) => value + 1);
 
-  // Android's back button: step back inside the app before leaving it. The
-  // shell calls this and only closes the app when it answers false.
+  // Android's back button: step back inside the app before leaving it.
   useEffect(() => {
     window.JVBack = () => {
       if (screen.name === "trips") return false;
@@ -118,9 +126,9 @@ function App() {
   })();
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <header className="sticky top-0 z-20 flex items-center gap-2 bg-brand-700 px-4 py-3 text-white shadow-sm">
-        <span aria-hidden className="grid h-7 w-7 place-items-center rounded-lg bg-white/20 text-sm">
+    <div className="flex min-h-screen flex-col bg-stone-50">
+      <header className="sticky top-0 z-20 flex items-center gap-2.5 bg-brand-700 px-4 py-3.5 text-white shadow-sm">
+        <span aria-hidden className="grid h-8 w-8 place-items-center rounded-xl bg-white/20 text-base">
           ◇
         </span>
         <span className="text-base font-semibold">Journey Valley</span>
@@ -128,32 +136,31 @@ function App() {
           <button
             type="button"
             onClick={() => setScreen({ name: "new" })}
-            className="ml-auto rounded-lg bg-white/15 px-3 py-1.5 text-sm font-medium active:bg-white/25"
+            className="ml-auto rounded-xl bg-white/15 px-3.5 py-2 text-sm font-semibold active:bg-white/25"
           >
-            + Trip
+            + Voyage
           </button>
         )}
       </header>
 
       <main className="flex-1 px-4 pb-24 pt-4">{body}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]">
         {(
           [
-            { key: "trips", label: "Trips", icon: "✈" },
-            { key: "savings", label: "Savings", icon: "↓" },
-            { key: "settings", label: "Settings", icon: "⚙" },
+            { key: "trips", label: "Voyages", icon: "✈" },
+            { key: "savings", label: "Économies", icon: "↓" },
+            { key: "settings", label: "Réglages", icon: "⚙" },
           ] as const
         ).map((tab) => {
-          const active =
-            screen.name === tab.key || (tab.key === "trips" && screen.name === "trip");
+          const active = screen.name === tab.key || (tab.key === "trips" && screen.name === "trip");
           return (
             <button
               key={tab.key}
               type="button"
               onClick={() => setScreen({ name: tab.key } as Screen)}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-xs font-medium ${
-                active ? "text-brand-700" : "text-slate-500"
+                active ? "text-brand-700" : "text-stone-500"
               }`}
             >
               <span aria-hidden className="text-lg leading-none">
@@ -168,7 +175,7 @@ function App() {
   );
 }
 
-/* ---------------------------------------------------------------- screens */
+/* --------------------------------------------------------------- écrans */
 
 function TripsScreen({ revision, onOpen }: { revision: number; onOpen: (id: number) => void }) {
   const trips = useMemo(() => store.listTrips(), [revision]);
@@ -176,60 +183,84 @@ function TripsScreen({ revision, onOpen }: { revision: number; onOpen: (id: numb
   if (trips.length === 0) {
     return (
       <Empty
-        title="No trips yet"
-        hint="Tap “+ Trip” to start one — a rough idea with no dates counts."
+        title="Aucun voyage pour l'instant"
+        hint="Touchez « + Voyage » pour commencer — une idée sans dates, ça compte aussi."
       />
     );
   }
 
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-4">
       {trips.map((trip) => {
         const bookings = store.listBookings(trip.id);
         const expenses = store.listExpenses(trip.id);
         const budget = budgetStatus(trip, bookings, expenses);
         const savings = savingsSummary(trip, bookings);
+        const when = countdown(trip.start_date, trip.end_date);
 
         return (
           <li key={trip.id}>
             <button
               type="button"
               onClick={() => onOpen(trip.id)}
-              className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm active:bg-slate-50"
+              className="w-full overflow-hidden rounded-2xl border border-stone-200 bg-white text-left shadow-sm active:bg-stone-50"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-900">{trip.title}</p>
-                  <p className="mt-0.5 truncate text-sm text-slate-500">
+              <div
+                className="relative flex h-24 items-end px-4 pb-3 pt-3"
+                style={coverStyle(`${trip.destination_city}${trip.destination_country}`)}
+              >
+                <div className="absolute inset-x-4 top-3 flex items-start justify-between gap-2">
+                  <Pill className={STAGE_TONE[trip.stage]}>{STAGE_LABEL[trip.stage]}</Pill>
+                  {when.upcoming && trip.stage !== "cancelled" && (
+                    <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold text-white">
+                      {when.label}
+                    </span>
+                  )}
+                </div>
+                <div className="text-white">
+                  <p className="text-base font-semibold leading-tight">{trip.title}</p>
+                  <p className="text-xs text-white/85">
                     {trip.destination_city}, {trip.destination_country}
                   </p>
                 </div>
-                <Pill className={STAGE_TONE[trip.stage]}>{STAGE_LABEL[trip.stage]}</Pill>
               </div>
 
-              <div className="mt-3 flex items-baseline justify-between text-sm">
-                <span className="text-slate-600">
-                  {formatMoney(budget.committed_cents, CURRENCY)}
-                  {trip.budget_cents > 0 && (
-                    <span className="text-slate-400">
-                      {" "}
-                      of {formatMoney(trip.budget_cents, CURRENCY)}
+              <div className="space-y-2.5 px-4 py-3.5">
+                <p className="text-xs text-stone-500">
+                  {formatDateRange(trip.start_date, trip.end_date)} ·{" "}
+                  {formatNights(tripNights(trip))}
+                </p>
+
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-stone-700">
+                    {formatMoney(budget.committed_cents, CURRENCY)}
+                    {trip.budget_cents > 0 && (
+                      <span className="text-stone-400">
+                        {" "}
+                        sur {formatMoney(trip.budget_cents, CURRENCY)}
+                      </span>
+                    )}
+                  </span>
+                  {savings.basis !== "none" && (
+                    <span
+                      className={
+                        savings.provisional
+                          ? "text-amber-700"
+                          : savings.saved_cents >= 0
+                            ? "text-emerald-700"
+                            : "text-rose-700"
+                      }
+                    >
+                      {savings.provisional ? "≈ " : savings.saved_cents >= 0 ? "économisé " : "+ "}
+                      {formatMoney(Math.abs(savings.saved_cents), CURRENCY)}
                     </span>
                   )}
-                </span>
-                {savings.basis !== "none" && (
-                  <span
-                    className={savings.saved_cents >= 0 ? "text-emerald-700" : "text-rose-700"}
-                  >
-                    {savings.saved_cents >= 0 ? "saved " : "over by "}
-                    {formatMoney(Math.abs(savings.saved_cents), CURRENCY)}
-                  </span>
+                </div>
+
+                {trip.budget_cents > 0 && (
+                  <Meter percent={budget.percent_used} over={budget.over_budget} />
                 )}
               </div>
-
-              {trip.budget_cents > 0 && (
-                <Meter percent={budget.percent_used} over={budget.over_budget} />
-              )}
             </button>
           </li>
         );
@@ -253,23 +284,25 @@ function TripScreen({
   const [error, setError] = useState<string | null>(null);
 
   if (!trip) {
-    return <Empty title="This trip is gone" hint="It was deleted on this device." />;
+    return <Empty title="Ce voyage n'existe plus" hint="Il a été supprimé sur cet appareil." />;
   }
 
   const travellers = store.listTravellers(tripId);
   const bookings = store.listBookings(tripId);
   const expenses = store.listExpenses(tripId);
+  const checklist = store.listChecklist(tripId);
   const budget = budgetStatus(trip, bookings, expenses);
   const savings = savingsSummary(trip, bookings);
   const balances = splitBalances(travellers, expenses);
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, "owner");
+  const when = countdown(trip.start_date, trip.end_date);
   const nameById = new Map(travellers.map((traveller) => [traveller.user_id, traveller.name]));
 
   const runAction = (action: StageAction) => {
     const check = checkStageChange(trip, action, "owner");
     if (!check.allowed || !check.nextStage) {
-      setError(check.reason ?? "That is not possible right now.");
+      setError(check.reason ?? "Impossible pour l'instant.");
       return;
     }
     setError(null);
@@ -277,26 +310,60 @@ function TripScreen({
     refresh();
   };
 
+  const summaryText = [
+    `${trip.title} — ${formatDateRange(trip.start_date, trip.end_date)}`,
+    `Total : ${formatMoney(budget.committed_cents, CURRENCY)} (${formatMoney(budget.per_traveller_cents, CURRENCY)} par personne)`,
+    "",
+    ...balances.map((balance) =>
+      balance.net_cents === 0
+        ? `${balance.name} : à jour`
+        : balance.net_cents > 0
+          ? `${balance.name} : on lui doit ${formatMoney(balance.net_cents, CURRENCY)}`
+          : `${balance.name} : doit ${formatMoney(-balance.net_cents, CURRENCY)}`,
+    ),
+    ...(transfers.length > 0
+      ? [
+          "",
+          "Pour être quittes :",
+          ...transfers.map(
+            (transfer) =>
+              `${transfer.from_name} → ${transfer.to_name} : ${formatMoney(transfer.amount_cents, CURRENCY)}`,
+          ),
+        ]
+      : []),
+  ].join("\n");
+
   return (
     <div className="space-y-4">
-      <button type="button" onClick={onBack} className="text-sm text-slate-500">
-        ← All trips
+      <button type="button" onClick={onBack} className="text-sm text-stone-500">
+        ← Tous les voyages
       </button>
 
-      <div>
+      <div
+        className="overflow-hidden rounded-2xl px-4 py-4 text-white"
+        style={coverStyle(`${trip.destination_city}${trip.destination_country}`)}
+      >
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold text-slate-900">{trip.title}</h1>
           <Pill className={STAGE_TONE[trip.stage]}>{STAGE_LABEL[trip.stage]}</Pill>
+          {when.upcoming && trip.stage !== "cancelled" && (
+            <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
+              {when.label}
+            </span>
+          )}
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          {trip.destination_city}, {trip.destination_country} · {trip.start_date} → {trip.end_date}{" "}
-          · {tripNights(trip)} night{tripNights(trip) === 1 ? "" : "s"}
+        <h1 className="mt-2 text-xl font-semibold">{trip.title}</h1>
+        <p className="mt-1 text-sm text-white/85">
+          {trip.destination_city}, {trip.destination_country}
         </p>
-        {trip.summary && <p className="mt-2 text-sm text-slate-700">{trip.summary}</p>}
+        <p className="text-sm text-white/85">
+          {formatDateRange(trip.start_date, trip.end_date)} · {formatNights(tripNights(trip))} ·{" "}
+          {formatTravellers(travellers.length)}
+        </p>
+        {trip.summary && <p className="mt-2.5 text-sm leading-relaxed text-white/90">{trip.summary}</p>}
       </div>
 
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200 ring-inset">
+        <p className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700 ring-1 ring-rose-200 ring-inset">
           {error}
         </p>
       )}
@@ -310,8 +377,8 @@ function TripScreen({
               onClick={() => runAction(action)}
               className={
                 index === 0 && action !== "cancel"
-                  ? "rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white active:bg-brand-700"
-                  : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
+                  ? "rounded-xl bg-brand-600 px-3.5 py-2.5 text-sm font-semibold text-white active:bg-brand-700"
+                  : "rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100"
               }
             >
               {STAGE_ACTION_LABEL[action]}
@@ -321,34 +388,40 @@ function TripScreen({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Tile label="Committed" value={formatMoney(budget.committed_cents, CURRENCY)} />
+        <Tile label="Engagé" value={formatMoney(budget.committed_cents, CURRENCY)} />
         <Tile
-          label="Budget left"
+          label="Reste du budget"
           value={trip.budget_cents > 0 ? formatMoney(budget.remaining_cents, CURRENCY) : "—"}
           tone={budget.over_budget ? "warn" : "plain"}
         />
-        <Tile label="Per traveller" value={formatMoney(budget.per_traveller_cents, CURRENCY)} />
+        <Tile label="Par personne" value={formatMoney(budget.per_traveller_cents, CURRENCY)} />
         <Tile
-          label="Saved vs. agency"
+          label="Économisé"
           value={savings.basis === "none" ? "—" : formatMoney(savings.saved_cents, CURRENCY)}
-          tone={savings.basis !== "none" && savings.saved_cents > 0 ? "good" : "plain"}
+          tone={
+            savings.basis !== "none" && !savings.provisional && savings.saved_cents > 0
+              ? "good"
+              : savings.provisional
+                ? "warn"
+                : "plain"
+          }
         />
       </div>
 
       {trip.budget_cents > 0 && (
         <Card title="Budget">
           <div className="px-4 py-3">
-            <div className="flex items-baseline justify-between text-sm text-slate-600">
+            <div className="flex items-baseline justify-between text-sm text-stone-600">
               <span>
-                {formatMoney(budget.committed_cents, CURRENCY)} of{" "}
+                {formatMoney(budget.committed_cents, CURRENCY)} sur{" "}
                 {formatMoney(trip.budget_cents, CURRENCY)}
               </span>
-              <span>{budget.percent_used}%</span>
+              <span>{budget.percent_used} %</span>
             </div>
             <Meter percent={budget.percent_used} over={budget.over_budget} />
             {budget.over_budget && (
               <p className="mt-2 text-xs text-rose-600">
-                {formatMoney(-budget.remaining_cents, CURRENCY)} over what you set out to spend.
+                {formatMoney(-budget.remaining_cents, CURRENCY)} de plus que prévu.
               </p>
             )}
           </div>
@@ -356,68 +429,77 @@ function TripScreen({
       )}
 
       {savings.basis !== "none" && (
-        <Card
-          title={savings.basis === "trip_quote" ? "Against the package price" : "Against your quotes"}
-        >
+        <Card title={savings.basis === "trip_quote" ? "Face au forfait" : "Face à vos devis"}>
           <div className="space-y-3 px-4 py-3">
             <CompareBar
-              label="Agency quote"
+              label="Devis agence"
               value={savings.agency_cents}
               max={Math.max(savings.agency_cents, savings.your_cost_cents)}
               color="bg-orange-500"
             />
             <CompareBar
-              label="You paid"
+              label="Vous avez payé"
               value={savings.your_cost_cents}
               max={Math.max(savings.agency_cents, savings.your_cost_cents)}
               color="bg-brand-600"
             />
-            <p className="text-sm text-slate-600">
-              {savings.saved_cents >= 0 ? (
-                <>
-                  Booking it yourself keeps{" "}
-                  <strong className="text-emerald-700">
-                    {formatMoney(savings.saved_cents, CURRENCY)}
-                  </strong>{" "}
-                  ({savings.saved_percent}%).
-                </>
-              ) : (
-                <>
-                  That is{" "}
-                  <strong className="text-rose-700">
-                    {formatMoney(-savings.saved_cents, CURRENCY)}
-                  </strong>{" "}
-                  more than the quote.
-                </>
-              )}
-            </p>
+            {savings.provisional ? (
+              <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                Le voyage n'est pas entièrement réservé : le devis couvre tout, vos réservations
+                pas encore. L'écart de {formatMoney(savings.saved_cents, CURRENCY)} est une
+                estimation, et ne compte pas dans le total des économies.
+              </p>
+            ) : (
+              <p className="text-sm text-stone-600">
+                {savings.saved_cents >= 0 ? (
+                  <>
+                    Réserver vous-même vous garde{" "}
+                    <strong className="text-emerald-700">
+                      {formatMoney(savings.saved_cents, CURRENCY)}
+                    </strong>{" "}
+                    ({savings.saved_percent} %).
+                  </>
+                ) : (
+                  <>
+                    C'est{" "}
+                    <strong className="text-rose-700">
+                      {formatMoney(-savings.saved_cents, CURRENCY)}
+                    </strong>{" "}
+                    de plus que le devis.
+                  </>
+                )}
+              </p>
+            )}
           </div>
         </Card>
       )}
 
-      <Card title={`Bookings (${bookings.length})`}>
+      <ChecklistCard tripId={trip.id} items={checklist} refresh={refresh} />
+
+      <Card title={`Réservations (${bookings.length})`}>
         {bookings.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">Nothing booked yet.</p>
+          <p className="px-4 py-4 text-sm text-stone-500">Rien de réservé pour l'instant.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-stone-100">
             {bookings.map((booking) => (
               <li key={booking.id} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-slate-900">{booking.vendor}</p>
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="font-medium text-stone-900">{booking.vendor}</p>
+                  <p className="text-xs text-stone-500">
                     {BOOKING_LABEL[booking.type]}
                     {booking.description ? ` · ${booking.description}` : ""}
-                    {booking.nights ? ` · ${booking.nights} nights` : ""}
+                    {booking.nights ? ` · ${booking.nights} nuits` : ""}
                   </p>
+                  <p className="text-xs text-stone-400">{formatDate(booking.start_at)}</p>
                   {booking.agency_quote_cents > 0 && (
                     <p className="text-xs text-emerald-700">
-                      agency {formatMoney(booking.agency_quote_cents, CURRENCY)} — you save{" "}
+                      agence {formatMoney(booking.agency_quote_cents, CURRENCY)} · −
                       {formatMoney(booking.agency_quote_cents - booking.amount_cents, CURRENCY)}
                     </p>
                   )}
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="tabular-nums text-slate-700">
+                  <p className="tabular-nums text-stone-800">
                     {formatMoney(booking.amount_cents, CURRENCY)}
                   </p>
                   <button
@@ -426,41 +508,45 @@ function TripScreen({
                       store.deleteBooking(booking.id);
                       refresh();
                     }}
-                    className="text-xs text-slate-400"
+                    className="text-xs text-stone-400"
                   >
-                    Remove
+                    Supprimer
                   </button>
                 </div>
               </li>
             ))}
           </ul>
         )}
-        <Expander label="Add a booking">
-          <BookingForm
-            tripId={trip.id}
-            defaultDate={trip.start_date}
-            onAdded={() => refresh()}
-          />
+        <Expander label="Ajouter une réservation">
+          <BookingForm tripId={trip.id} defaultDate={trip.start_date} onAdded={refresh} />
         </Expander>
       </Card>
 
-      <Card title={`Spending (${expenses.length})`}>
+      <Card title={`Dépenses (${expenses.length})`}>
         {expenses.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500">Nothing logged yet.</p>
+          <p className="px-4 py-4 text-sm text-stone-500">Rien de noté pour l'instant.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <ul className="divide-y divide-stone-100">
             {expenses.map((expense) => (
               <li key={expense.id} className="flex items-start justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-slate-900">{expense.description}</p>
-                  <p className="truncate text-xs text-slate-500">
-                    {CATEGORY_LABEL[expense.category]} · {expense.spent_on} ·{" "}
-                    {nameById.get(expense.paid_by) ?? "someone"} ·{" "}
-                    {expense.shared ? "split" : "personal"}
+                  <p className="font-medium text-stone-900">{expense.description}</p>
+                  <p className="text-xs text-stone-500">
+                    {CATEGORY_LABEL[expense.category]} · {formatDate(expense.spent_on)} ·{" "}
+                    {nameById.get(expense.paid_by) ?? "quelqu'un"}
+                  </p>
+                  <p className="text-xs text-stone-400">
+                    {expense.shared
+                      ? expense.participant_ids
+                        ? `partagée entre ${expense.participant_ids
+                            .map((userId) => nameById.get(userId) ?? "?")
+                            .join(", ")}`
+                        : "partagée entre tous"
+                      : "personnelle"}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="tabular-nums text-slate-700">
+                  <p className="tabular-nums text-stone-800">
                     {formatMoney(expense.amount_cents, CURRENCY)}
                   </p>
                   <button
@@ -469,27 +555,27 @@ function TripScreen({
                       store.deleteExpense(expense.id);
                       refresh();
                     }}
-                    className="text-xs text-slate-400"
+                    className="text-xs text-stone-400"
                   >
-                    Delete
+                    Supprimer
                   </button>
                 </div>
               </li>
             ))}
           </ul>
         )}
-        <Expander label="Log an expense">
+        <Expander label="Noter une dépense">
           <ExpenseForm
             tripId={trip.id}
             travellers={travellers}
             defaultDate={trip.start_date}
-            onAdded={() => refresh()}
+            onAdded={refresh}
           />
         </Expander>
       </Card>
 
-      <Card title="Who's coming">
-        <ul className="divide-y divide-slate-100">
+      <Card title="Qui vient">
+        <ul className="divide-y divide-stone-100">
           {travellers.map((traveller) => {
             const balance = balances.find((entry) => entry.user_id === traveller.user_id);
             return (
@@ -497,19 +583,26 @@ function TripScreen({
                 key={traveller.user_id}
                 className="flex items-center justify-between gap-3 px-4 py-3"
               >
-                <div>
-                  <p className="font-medium text-slate-900">
-                    {traveller.name}
-                    {traveller.is_me ? <span className="ml-1 text-xs text-slate-400">you</span> : null}
-                  </p>
-                  {balance && (
-                    <p className="text-xs text-slate-500">
-                      paid {formatMoney(balance.paid_cents, CURRENCY)} · share{" "}
-                      {formatMoney(balance.share_cents, CURRENCY)}
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-stone-100 text-xs font-semibold text-stone-600">
+                    {initials(traveller.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-medium text-stone-900">
+                      {traveller.name}
+                      {traveller.is_me ? (
+                        <span className="ml-1 text-xs text-stone-400">vous</span>
+                      ) : null}
                     </p>
-                  )}
+                    {balance && (
+                      <p className="text-xs text-stone-500">
+                        a payé {formatMoney(balance.paid_cents, CURRENCY)} · part{" "}
+                        {formatMoney(balance.share_cents, CURRENCY)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
+                <div className="shrink-0 text-right">
                   {balance && (
                     <p
                       className={`text-sm tabular-nums ${
@@ -517,14 +610,14 @@ function TripScreen({
                           ? "text-emerald-700"
                           : balance.net_cents < 0
                             ? "text-rose-700"
-                            : "text-slate-500"
+                            : "text-stone-500"
                       }`}
                     >
                       {balance.net_cents === 0
-                        ? "square"
+                        ? "à jour"
                         : balance.net_cents > 0
-                          ? `is owed ${formatMoney(balance.net_cents, CURRENCY)}`
-                          : `owes ${formatMoney(-balance.net_cents, CURRENCY)}`}
+                          ? `on lui doit ${formatMoney(balance.net_cents, CURRENCY)}`
+                          : `doit ${formatMoney(-balance.net_cents, CURRENCY)}`}
                     </p>
                   )}
                   {!traveller.is_me && (
@@ -534,9 +627,9 @@ function TripScreen({
                         store.removeTraveller(trip.id, traveller.user_id);
                         refresh();
                       }}
-                      className="text-xs text-slate-400"
+                      className="text-xs text-stone-400"
                     >
-                      Remove
+                      Retirer
                     </button>
                   )}
                 </div>
@@ -545,37 +638,169 @@ function TripScreen({
           })}
         </ul>
 
-        <TravellerForm tripId={trip.id} onAdded={() => refresh()} />
+        <TravellerForm tripId={trip.id} onAdded={refresh} />
 
         {transfers.length > 0 && (
-          <div className="border-t border-slate-100 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Fewest payments
+          <div className="border-t border-stone-100 bg-stone-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Pour être quittes
             </p>
-            <ul className="mt-2 space-y-1 text-sm text-slate-700">
+            <ul className="mt-2 space-y-1 text-sm text-stone-700">
               {transfers.map((transfer) => (
                 <li key={`${transfer.from_user_id}-${transfer.to_user_id}`}>
-                  {transfer.from_name} → {transfer.to_name}:{" "}
+                  {transfer.from_name} → {transfer.to_name} :{" "}
                   <strong>{formatMoney(transfer.amount_cents, CURRENCY)}</strong>
                 </li>
               ))}
             </ul>
           </div>
         )}
+
+        {expenses.length > 0 && travellers.length > 1 && <ShareButton text={summaryText} />}
       </Card>
 
       <button
         type="button"
         onClick={() => {
-          if (confirm(`Delete “${trip.title}” and everything on it?`)) {
+          if (confirm(`Supprimer « ${trip.title} » et tout ce qu'il contient ?`)) {
             store.deleteTrip(trip.id);
             refresh();
             onBack();
           }
         }}
-        className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2.5 text-sm font-medium text-rose-700 active:bg-rose-50"
+        className="w-full rounded-xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-700 active:bg-rose-50"
       >
-        Delete this trip
+        Supprimer ce voyage
+      </button>
+    </div>
+  );
+}
+
+function ChecklistCard({
+  tripId,
+  items,
+  refresh,
+}: {
+  tripId: number;
+  items: store.LocalChecklistItem[];
+  refresh: () => void;
+}) {
+  const done = items.filter((item) => item.done).length;
+  const percent = items.length === 0 ? 0 : Math.round((done / items.length) * 100);
+
+  return (
+    <Card title={items.length > 0 ? `Avant de partir (${done}/${items.length})` : "Avant de partir"}>
+      {items.length === 0 ? (
+        <div className="space-y-3 px-4 py-4 text-center">
+          <p className="text-sm text-stone-500">
+            Passeport, assurance, adaptateur… ce qu'il ne faut pas oublier.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              store.addChecklistTemplate(tripId);
+              refresh();
+            }}
+            className="rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100"
+          >
+            Ajouter les essentiels
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="px-4 pt-3">
+            <Meter percent={percent} />
+          </div>
+          <ul className="mt-2 divide-y divide-stone-100">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.toggleChecklistItem(item.id);
+                    refresh();
+                  }}
+                  aria-label={item.done ? `Décocher ${item.label}` : `Cocher ${item.label}`}
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border text-xs ${
+                    item.done
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : "border-stone-300 bg-white text-transparent"
+                  }`}
+                >
+                  ✓
+                </button>
+                <span
+                  className={`flex-1 text-sm ${item.done ? "text-stone-400 line-through" : "text-stone-800"}`}
+                >
+                  {item.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.deleteChecklistItem(item.id);
+                    refresh();
+                  }}
+                  className="text-xs text-stone-400"
+                >
+                  Supprimer
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <form
+        className="flex gap-2 border-t border-stone-100 px-4 py-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const label = String(new FormData(form).get("label") ?? "").trim();
+          if (!label) return;
+          store.addChecklistItem(tripId, label);
+          form.reset();
+          refresh();
+        }}
+      >
+        <input name="label" placeholder="Ajouter une chose à faire" className={`${inputClass} flex-1`} />
+        <button
+          type="submit"
+          className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 active:bg-stone-100"
+        >
+          Ajouter
+        </button>
+      </form>
+    </Card>
+  );
+}
+
+function ShareButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function share() {
+    // The Android shell offers a real share sheet; a browser falls back to the
+    // clipboard.
+    if (window.JVShare) {
+      window.JVShare.text(text);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-stone-100 px-4 py-3">
+      <button
+        type="button"
+        onClick={share}
+        className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100"
+      >
+        {copied ? "Copié ✓" : "Partager le récap"}
       </button>
     </div>
   );
@@ -599,16 +824,16 @@ function NewTripScreen({
         const read = (key: string) => String(data.get(key) ?? "").trim();
 
         const title = read("title");
-        if (title.length < 3) return setError("Give the trip a name you'll recognise.");
-        if (!read("destination_city")) return setError("Where are you going?");
+        if (title.length < 3) return setError("Donnez-lui un nom que vous reconnaîtrez.");
+        if (!read("destination_city")) return setError("Vous allez où ?");
         if (read("end_date") < read("start_date")) {
-          return setError("The return date cannot be before you leave.");
+          return setError("Le retour ne peut pas précéder le départ.");
         }
 
         const budget = read("budget") === "" ? 0 : parseAmountToCents(read("budget"));
-        if (budget === null) return setError("The budget is not an amount I can read.");
+        if (budget === null) return setError("Le budget n'est pas un montant lisible.");
         const quote = read("agency_quote") === "" ? 0 : parseAmountToCents(read("agency_quote"));
-        if (quote === null) return setError("The agency quote is not an amount I can read.");
+        if (quote === null) return setError("Le devis n'est pas un montant lisible.");
 
         const trip = store.createTrip({
           title,
@@ -623,41 +848,58 @@ function NewTripScreen({
         onCreated(trip.id);
       }}
     >
-      <h1 className="text-lg font-semibold text-slate-900">Plan a trip</h1>
+      <h1 className="text-xl font-semibold text-stone-900">Un nouveau voyage</h1>
       {error && (
-        <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200 ring-inset">
+        <p className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700 ring-1 ring-rose-200 ring-inset">
           {error}
         </p>
       )}
 
-      <Field label="Name">
-        <input name="title" required placeholder="Norway fjords road trip" className={inputClass} />
+      <Field label="Nom">
+        <input
+          name="title"
+          required
+          placeholder="Road trip dans les fjords"
+          className={inputClass}
+        />
       </Field>
-      <Field label="The idea">
+      <Field label="L'idée">
         <textarea name="summary" rows={2} className={inputClass} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="City">
+        <Field label="Ville">
           <input name="destination_city" required placeholder="Bergen" className={inputClass} />
         </Field>
-        <Field label="Country">
-          <input name="destination_country" placeholder="Norway" className={inputClass} />
+        <Field label="Pays">
+          <input name="destination_country" placeholder="Norvège" className={inputClass} />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Leaving">
-          <input name="start_date" type="date" required defaultValue={store.today()} className={inputClass} />
+        <Field label="Départ">
+          <input
+            name="start_date"
+            type="date"
+            required
+            defaultValue={store.today()}
+            className={inputClass}
+          />
         </Field>
-        <Field label="Back">
-          <input name="end_date" type="date" required defaultValue={store.today(3)} className={inputClass} />
+        <Field label="Retour">
+          <input
+            name="end_date"
+            type="date"
+            required
+            defaultValue={store.today(3)}
+            className={inputClass}
+          />
         </Field>
       </div>
-      <Field label={`Budget (${CURRENCY})`} hint="Optional.">
+      <Field label={`Budget (${CURRENCY})`} hint="Facultatif.">
         <input name="budget" inputMode="decimal" placeholder="2 100" className={inputClass} />
       </Field>
       <Field
-        label={`Agency quote (${CURRENCY})`}
-        hint="Optional, and the point: what a packaged version was quoted at."
+        label={`Devis agence (${CURRENCY})`}
+        hint="Facultatif, et c'est tout l'intérêt : le prix du même voyage en formule."
       >
         <input name="agency_quote" inputMode="decimal" placeholder="2 890" className={inputClass} />
       </Field>
@@ -665,29 +907,23 @@ function NewTripScreen({
       <div className="flex gap-2">
         <button
           type="submit"
-          className="flex-1 rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-medium text-white active:bg-brand-700"
+          className="flex-1 rounded-xl bg-brand-600 px-3 py-3 text-sm font-semibold text-white active:bg-brand-700"
         >
-          Create
+          Créer
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700"
+          className="rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-stone-700"
         >
-          Cancel
+          Annuler
         </button>
       </div>
     </form>
   );
 }
 
-function SavingsScreen({
-  revision,
-  onOpen,
-}: {
-  revision: number;
-  onOpen: (id: number) => void;
-}) {
+function SavingsScreen({ revision, onOpen }: { revision: number; onOpen: (id: number) => void }) {
   const rows = useMemo(
     () =>
       store
@@ -698,66 +934,93 @@ function SavingsScreen({
     [revision],
   );
 
-  const agency = rows.reduce((sum, entry) => sum + entry.savings.agency_cents, 0);
-  const yours = rows.reduce((sum, entry) => sum + entry.savings.your_cost_cents, 0);
+  const settled = rows.filter((entry) => !entry.savings.provisional);
+  const pending = rows.filter((entry) => entry.savings.provisional);
+  const agency = settled.reduce((sum, entry) => sum + entry.savings.agency_cents, 0);
+  const yours = settled.reduce((sum, entry) => sum + entry.savings.your_cost_cents, 0);
 
   if (rows.length === 0) {
     return (
       <Empty
-        title="Nothing to compare yet"
-        hint="Record an agency quote on a trip, or on a single booking, and it shows up here."
+        title="Rien à comparer pour l'instant"
+        hint="Notez un devis d'agence sur un voyage, ou sur une seule réservation, et l'écart apparaît ici."
       />
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-emerald-50 px-4 py-4 ring-1 ring-emerald-200 ring-inset">
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">
-          Kept in your pocket
+      <div className="rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 px-5 py-5 text-white">
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-100">
+          Gardé dans votre poche
         </p>
-        <p className="mt-1 text-3xl font-semibold text-emerald-900">
-          {formatMoney(agency - yours, CURRENCY)}
-        </p>
-        <p className="mt-1 text-sm text-emerald-800">
-          Across {rows.length} compared trip{rows.length === 1 ? "" : "s"}, against{" "}
-          {formatMoney(agency, CURRENCY)} of quotes.
+        <p className="mt-1 text-3xl font-semibold">{formatMoney(agency - yours, CURRENCY)}</p>
+        <p className="mt-1 text-sm text-brand-100">
+          {settled.length > 0
+            ? `Sur ${settled.length} voyage${settled.length > 1 ? "s" : ""} entièrement réservé${settled.length > 1 ? "s" : ""}, face à ${formatMoney(agency, CURRENCY)} de devis.`
+            : "Aucun voyage entièrement réservé — les estimations sont plus bas."}
         </p>
       </div>
 
-      <Card title="Trip by trip">
-        <ul className="divide-y divide-slate-100">
-          {rows.map(({ trip, savings }) => (
-            <li key={trip.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(trip.id)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-slate-50"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-900">{trip.title}</p>
-                  <p className="text-xs text-slate-500">
-                    {savings.basis === "trip_quote" ? "Whole package" : "Individual bookings"} ·{" "}
-                    {formatMoney(savings.your_cost_cents, CURRENCY)} vs{" "}
-                    {formatMoney(savings.agency_cents, CURRENCY)}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 text-sm tabular-nums ${
-                    savings.saved_cents >= 0 ? "text-emerald-700" : "text-rose-700"
-                  }`}
+      {settled.length > 0 && (
+        <Card title="Voyage par voyage">
+          <ul className="divide-y divide-stone-100">
+            {settled.map(({ trip, savings }) => (
+              <li key={trip.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(trip.id)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-stone-50"
                 >
-                  {formatMoney(savings.saved_cents, CURRENCY)}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Card>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-stone-900">{trip.title}</p>
+                    <p className="text-xs text-stone-500">
+                      {formatMoney(savings.your_cost_cents, CURRENCY)} contre{" "}
+                      {formatMoney(savings.agency_cents, CURRENCY)}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm tabular-nums ${
+                      savings.saved_cents >= 0 ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {formatMoney(savings.saved_cents, CURRENCY)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
-      <p className="text-xs text-slate-500">
-        These figures only compare what you recorded as an agency quote. A package may bundle
-        extras, so put like against like.
+      {pending.length > 0 && (
+        <Card title="Estimations en cours">
+          <p className="px-4 pt-3 text-sm text-stone-500">
+            Ces voyages ne sont pas entièrement réservés : l'écart n'est pas définitif et ne compte
+            pas dans le total.
+          </p>
+          <ul className="mt-2 divide-y divide-stone-100">
+            {pending.map(({ trip, savings }) => (
+              <li key={trip.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(trip.id)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-stone-50"
+                >
+                  <span className="truncate font-medium text-stone-900">{trip.title}</span>
+                  <span className="shrink-0 text-sm tabular-nums text-amber-700">
+                    ≈ {formatMoney(savings.saved_cents, CURRENCY)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <p className="text-xs leading-relaxed text-stone-500">
+        Ces chiffres ne comparent que ce que vous avez saisi comme devis. Un forfait peut inclure
+        des extras — comparez ce qui est comparable.
       </p>
     </div>
   );
@@ -768,19 +1031,19 @@ function SettingsScreen({ onChanged }: { onChanged: () => void }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
+      <h1 className="text-xl font-semibold text-stone-900">Réglages</h1>
 
-      <Card title="This device">
-        <dl className="divide-y divide-slate-100 text-sm">
+      <Card title="Sur cet appareil">
+        <dl className="divide-y divide-stone-100 text-sm">
           {[
-            ["Trips", db.trips.length],
-            ["Bookings", db.bookings.length],
-            ["Expenses", db.expenses.length],
-            ["Storage", window.JVStore ? "App storage" : "Browser storage"],
+            ["Voyages", db.trips.length],
+            ["Réservations", db.bookings.length],
+            ["Dépenses", db.expenses.length],
+            ["Stockage", window.JVStore ? "Mémoire de l'app" : "Navigateur"],
           ].map(([label, value]) => (
             <div key={String(label)} className="flex justify-between px-4 py-2.5">
-              <dt className="text-slate-600">{label}</dt>
-              <dd className="font-medium text-slate-900">{value}</dd>
+              <dt className="text-stone-600">{label}</dt>
+              <dd className="font-medium text-stone-900">{value}</dd>
             </div>
           ))}
         </dl>
@@ -790,39 +1053,39 @@ function SettingsScreen({ onChanged }: { onChanged: () => void }) {
         <button
           type="button"
           onClick={() => {
-            if (confirm("Replace everything with the demo trips?")) {
+            if (confirm("Remplacer tout par les voyages de démonstration ?")) {
               store.resetToDemo();
               onChanged();
             }
           }}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 active:bg-slate-100"
+          className="w-full rounded-xl border border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-stone-700 active:bg-stone-100"
         >
-          Reload the demo trips
+          Recharger la démonstration
         </button>
         <button
           type="button"
           onClick={() => {
-            if (confirm("Delete every trip on this device?")) {
+            if (confirm("Supprimer tous les voyages de cet appareil ?")) {
               store.clearAll();
               onChanged();
             }
           }}
-          className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2.5 text-sm font-medium text-rose-700 active:bg-rose-50"
+          className="w-full rounded-xl border border-rose-200 bg-white px-3 py-3 text-sm font-semibold text-rose-700 active:bg-rose-50"
         >
-          Start from empty
+          Repartir de zéro
         </button>
       </div>
 
-      <p className="text-xs text-slate-500">
-        This build keeps everything on the phone — no account, no server, nothing leaves the
-        device. Companions are names you type, not people with logins; the web app is where trips
-        are shared between real accounts.
+      <p className="text-xs leading-relaxed text-stone-500">
+        Cette version garde tout sur le téléphone : pas de compte, pas de serveur, rien ne sort de
+        l'appareil. Les compagnons sont des prénoms que vous tapez, pas des comptes ; le partage
+        entre vraies personnes, c'est le site.
       </p>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ forms */
+/* -------------------------------------------------------------- formulaires */
 
 function BookingForm({
   tripId,
@@ -838,18 +1101,18 @@ function BookingForm({
 
   return (
     <form
-      className="space-y-3 border-t border-slate-100 px-4 py-3"
+      className="space-y-3 border-t border-stone-100 px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const data = new FormData(form);
         const read = (key: string) => String(data.get(key) ?? "").trim();
 
-        if (!read("vendor")) return setError("Who did you book with?");
+        if (!read("vendor")) return setError("Réservé chez qui ?");
         const amount = parseAmountToCents(read("amount"));
-        if (amount === null) return setError("Enter an amount such as 246 or 245,90.");
+        if (amount === null) return setError("Un montant comme 246 ou 245,90.");
         const quote = read("agency_quote") === "" ? 0 : parseAmountToCents(read("agency_quote"));
-        if (quote === null) return setError("The agency quote is not an amount I can read.");
+        if (quote === null) return setError("Le devis n'est pas un montant lisible.");
 
         store.addBooking({
           trip_id: tripId,
@@ -870,7 +1133,7 @@ function BookingForm({
       {error && <p className="text-sm text-rose-700">{error}</p>}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="What">
+        <Field label="Quoi">
           <select
             value={type}
             onChange={(event) => setType(event.target.value as BookingType)}
@@ -883,44 +1146,44 @@ function BookingForm({
             ))}
           </select>
         </Field>
-        <Field label="With">
+        <Field label="Chez">
           <input name="vendor" required placeholder="Norwegian" className={inputClass} />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`You paid (${CURRENCY})`}>
+        <Field label={`Payé (${CURRENCY})`}>
           <input name="amount" required inputMode="decimal" placeholder="624" className={inputClass} />
         </Field>
-        <Field label="Agency quote">
+        <Field label="Devis agence">
           <input name="agency_quote" inputMode="decimal" placeholder="790" className={inputClass} />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Starts">
+        <Field label="À partir du">
           <input name="start_at" type="date" defaultValue={defaultDate} className={inputClass} />
         </Field>
         {type === "stay" ? (
-          <Field label="Nights">
+          <Field label="Nuits">
             <input name="nights" type="number" min={1} defaultValue={1} className={inputClass} />
           </Field>
         ) : (
-          <Field label="Ends">
+          <Field label="Jusqu'au">
             <input name="end_at" type="date" className={inputClass} />
           </Field>
         )}
       </div>
 
       <Field label="Notes">
-        <input name="description" placeholder="LYS → BGO return" className={inputClass} />
+        <input name="description" placeholder="LYS → BGO aller-retour" className={inputClass} />
       </Field>
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-medium text-white active:bg-brand-700"
+        className="w-full rounded-xl bg-brand-600 px-3 py-3 text-sm font-semibold text-white active:bg-brand-700"
       >
-        Add to the trip
+        Ajouter au voyage
       </button>
     </form>
   );
@@ -938,19 +1201,33 @@ function ExpenseForm({
   onAdded: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [shared, setShared] = useState(true);
+  const [participants, setParticipants] = useState<number[]>(() =>
+    travellers.map((traveller) => traveller.user_id),
+  );
+
+  const toggle = (userId: number) =>
+    setParticipants((current) =>
+      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId],
+    );
 
   return (
     <form
-      className="space-y-3 border-t border-slate-100 px-4 py-3"
+      className="space-y-3 border-t border-stone-100 px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const data = new FormData(form);
         const read = (key: string) => String(data.get(key) ?? "").trim();
 
-        if (!read("description")) return setError("What was it for?");
+        if (!read("description")) return setError("C'était pour quoi ?");
         const amount = parseAmountToCents(read("amount"));
-        if (amount === null) return setError("Enter an amount such as 24 or 23,80.");
+        if (amount === null) return setError("Un montant comme 24 ou 23,80.");
+
+        const named =
+          shared && participants.length > 0 && participants.length < travellers.length
+            ? participants
+            : null;
 
         store.addExpense({
           trip_id: tripId,
@@ -959,17 +1236,19 @@ function ExpenseForm({
           description: read("description"),
           spent_on: read("spent_on") || defaultDate,
           amount_cents: amount,
-          shared: data.get("shared") === "on",
+          shared,
+          participant_ids: named,
         });
         setError(null);
         form.reset();
+        setParticipants(travellers.map((traveller) => traveller.user_id));
         onAdded();
       }}
     >
       {error && <p className="text-sm text-rose-700">{error}</p>}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Category">
+        <Field label="Catégorie">
           <select name="category" defaultValue="food" className={inputClass}>
             {(Object.keys(CATEGORY_LABEL) as ExpenseCategory[]).map((key) => (
               <option key={key} value={key}>
@@ -978,17 +1257,21 @@ function ExpenseForm({
             ))}
           </select>
         </Field>
-        <Field label={`Amount (${CURRENCY})`}>
+        <Field label={`Montant (${CURRENCY})`}>
           <input name="amount" required inputMode="decimal" placeholder="42,50" className={inputClass} />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="When">
+        <Field label="Quand">
           <input name="spent_on" type="date" defaultValue={defaultDate} className={inputClass} />
         </Field>
-        <Field label="Who paid">
-          <select name="paid_by" defaultValue={String(travellers[0]?.user_id ?? "")} className={inputClass}>
+        <Field label="Qui a payé">
+          <select
+            name="paid_by"
+            defaultValue={String(travellers[0]?.user_id ?? "")}
+            className={inputClass}
+          >
             {travellers.map((traveller) => (
               <option key={traveller.user_id} value={traveller.user_id}>
                 {traveller.name}
@@ -998,20 +1281,54 @@ function ExpenseForm({
         </Field>
       </div>
 
-      <Field label="What was it">
-        <input name="description" required placeholder="Dinner in Bergen" className={inputClass} />
+      <Field label="C'était quoi">
+        <input name="description" required placeholder="Dîner à Bergen" className={inputClass} />
       </Field>
 
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="shared" defaultChecked className="h-4 w-4 rounded border-slate-300" />
-        Split between everyone on the trip
-      </label>
+      <div className="rounded-xl bg-stone-50 px-3.5 py-3">
+        <label className="flex items-center gap-2.5 text-sm font-medium text-stone-800">
+          <input
+            type="checkbox"
+            checked={shared}
+            onChange={(event) => setShared(event.target.checked)}
+            className="h-4 w-4 rounded border-stone-300"
+          />
+          Dépense partagée
+        </label>
+
+        {shared && travellers.length > 1 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+              Qui participe
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {travellers.map((traveller) => {
+                const on = participants.includes(traveller.user_id);
+                return (
+                  <button
+                    key={traveller.user_id}
+                    type="button"
+                    onClick={() => toggle(traveller.user_id)}
+                    className={`rounded-full px-3 py-1.5 text-sm font-medium ring-1 ring-inset ${
+                      on
+                        ? "bg-brand-600 text-white ring-brand-600"
+                        : "bg-white text-stone-600 ring-stone-300"
+                    }`}
+                  >
+                    {traveller.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-brand-600 px-3 py-2.5 text-sm font-medium text-white active:bg-brand-700"
+        className="w-full rounded-xl bg-brand-600 px-3 py-3 text-sm font-semibold text-white active:bg-brand-700"
       >
-        Log it
+        Ajouter la dépense
       </button>
     </form>
   );
@@ -1020,7 +1337,7 @@ function ExpenseForm({
 function TravellerForm({ tripId, onAdded }: { tripId: number; onAdded: () => void }) {
   return (
     <form
-      className="flex gap-2 border-t border-slate-100 px-4 py-3"
+      className="flex gap-2 border-t border-stone-100 px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         const form = event.currentTarget;
@@ -1031,21 +1348,21 @@ function TravellerForm({ tripId, onAdded }: { tripId: number; onAdded: () => voi
         onAdded();
       }}
     >
-      <input name="name" placeholder="Add someone" className={`${inputClass} flex-1`} />
+      <input name="name" placeholder="Ajouter quelqu'un" className={`${inputClass} flex-1`} />
       <button
         type="submit"
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 active:bg-slate-100"
+        className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 active:bg-stone-100"
       >
-        Add
+        Ajouter
       </button>
     </form>
   );
 }
 
-/* ------------------------------------------------------------------- bits */
+/* -------------------------------------------------------------------- bits */
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 outline-none focus:border-brand-500";
+  "w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 outline-none focus:border-brand-500";
 
 function Field({
   label,
@@ -1058,17 +1375,17 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-stone-700">{label}</span>
       <div className="mt-1">{children}</div>
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {hint && <p className="mt-1 text-xs leading-relaxed text-stone-500">{hint}</p>}
     </label>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <h2 className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+    <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+      <h2 className="border-b border-stone-100 px-4 py-3 text-sm font-semibold text-stone-900">
         {title}
       </h2>
       {children}
@@ -1090,24 +1407,24 @@ function Tile({
       ? "bg-emerald-50 ring-emerald-200"
       : tone === "warn"
         ? "bg-amber-50 ring-amber-200"
-        : "bg-white ring-slate-200";
+        : "bg-white ring-stone-200";
   return (
-    <div className={`rounded-xl px-3 py-3 shadow-sm ring-1 ring-inset ${ring}`}>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">{value}</p>
+    <div className={`rounded-2xl px-3.5 py-3 shadow-sm ring-1 ring-inset ${ring}`}>
+      <p className="text-xs font-medium uppercase tracking-wide text-stone-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-stone-900">{value}</p>
     </div>
   );
 }
 
 function Pill({ children, className }: { children: React.ReactNode; className: string }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{children}</span>
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${className}`}>{children}</span>
   );
 }
 
-function Meter({ percent, over }: { percent: number; over: boolean }) {
+function Meter({ percent, over }: { percent: number; over?: boolean }) {
   return (
-    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
       <div
         className={`h-full rounded-full ${over ? "bg-rose-500" : "bg-brand-600"}`}
         style={{ width: `${Math.max(percent, 2)}%` }}
@@ -1130,10 +1447,10 @@ function CompareBar({
   return (
     <div>
       <div className="flex items-baseline justify-between text-sm">
-        <span className="font-medium text-slate-700">{label}</span>
-        <span className="tabular-nums text-slate-600">{formatMoney(value, CURRENCY)}</span>
+        <span className="font-medium text-stone-700">{label}</span>
+        <span className="tabular-nums text-stone-600">{formatMoney(value, CURRENCY)}</span>
       </div>
-      <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-stone-100">
         <div
           className={`h-full rounded-full ${color}`}
           style={{ width: `${Math.max(percentOf(value, max), 2)}%` }}
@@ -1146,13 +1463,13 @@ function CompareBar({
 function Expander({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-t border-slate-100">
+    <div className="border-t border-stone-100">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="w-full px-4 py-2.5 text-left text-sm font-medium text-brand-700"
+        className="w-full px-4 py-3 text-left text-sm font-semibold text-brand-700"
       >
-        {open ? "Close" : label}
+        {open ? "Fermer" : label}
       </button>
       {open && children}
     </div>
@@ -1161,9 +1478,9 @@ function Expander({ label, children }: { label: string; children: React.ReactNod
 
 function Empty({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center">
-      <p className="font-medium text-slate-700">{title}</p>
-      {hint && <p className="mt-1 text-sm text-slate-500">{hint}</p>}
+    <div className="rounded-2xl border border-stone-200 bg-white px-4 py-10 text-center">
+      <p className="font-medium text-stone-700">{title}</p>
+      {hint && <p className="mt-1.5 text-sm leading-relaxed text-stone-500">{hint}</p>}
     </div>
   );
 }

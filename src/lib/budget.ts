@@ -39,6 +39,13 @@ export type SavingsBasis = "trip_quote" | "line_quotes" | "none";
 
 export interface SavingsSummary {
   basis: SavingsBasis;
+  /**
+   * True when a whole-package quote is being compared against a trip that is
+   * still being booked: the quote covers everything, the bookings do not yet,
+   * so the difference flatters you. The UI must say so, and totals must leave
+   * these out.
+   */
+  provisional: boolean;
   /** What you are paying for the scope that was compared. */
   your_cost_cents: number;
   /** What the agency or package would have cost for that same scope. */
@@ -50,6 +57,7 @@ export interface SavingsSummary {
 
 const NO_SAVINGS: SavingsSummary = {
   basis: "none",
+  provisional: false,
   your_cost_cents: 0,
   agency_cents: 0,
   saved_cents: 0,
@@ -64,12 +72,18 @@ const NO_SAVINGS: SavingsSummary = {
  * so the figure is never inflated by lines nobody priced.
  */
 export function savingsSummary(
-  trip: Pick<Trip, "agency_quote_cents">,
+  trip: Pick<Trip, "agency_quote_cents"> & Partial<Pick<Trip, "stage">>,
   bookings: Array<Pick<Booking, "amount_cents" | "agency_quote_cents">>,
 ): SavingsSummary {
   if (trip.agency_quote_cents > 0) {
     const yourCost = bookings.reduce((sum, booking) => sum + booking.amount_cents, 0);
-    return summarise("trip_quote", yourCost, trip.agency_quote_cents, bookings.length);
+    return summarise(
+      "trip_quote",
+      yourCost,
+      trip.agency_quote_cents,
+      bookings.length,
+      isStillBooking(trip.stage),
+    );
   }
 
   const compared = bookings.filter((booking) => booking.agency_quote_cents > 0);
@@ -80,15 +94,22 @@ export function savingsSummary(
   return summarise("line_quotes", yourCost, agency, compared.length);
 }
 
+/** Stages where the bookings are, by definition, not all in yet. */
+function isStillBooking(stage: Trip["stage"] | undefined): boolean {
+  return stage === "idea" || stage === "planning";
+}
+
 function summarise(
   basis: SavingsBasis,
   yourCost: number,
   agency: number,
   comparedLines: number,
+  provisional = false,
 ): SavingsSummary {
   const saved = agency - yourCost;
   return {
     basis,
+    provisional,
     your_cost_cents: yourCost,
     agency_cents: agency,
     saved_cents: saved,
@@ -108,6 +129,7 @@ export function savingsFromTotals(totals: {
   booked_cents: number;
   agency_total_cents: number;
   quoted_paid_cents: number;
+  stage?: Trip["stage"];
 }): SavingsSummary {
   return savingsSummary(totals, [
     { amount_cents: totals.quoted_paid_cents, agency_quote_cents: totals.agency_total_cents },
@@ -130,14 +152,19 @@ export interface MemberBalance {
 }
 
 /**
- * Splits shared expenses evenly across everyone on the trip. Rounding
- * remainders are handed out one cent at a time, starting at a different member
- * for each expense, so shares stay whole cents and always add back up to the
- * exact total.
+ * Splits shared expenses across the people they concern: everyone on the trip
+ * by default, or only `participant_ids` when the expense names a subset (the
+ * taxi three of you took, the museum two of you skipped). Rounding remainders
+ * are handed out one cent at a time, starting at a different person for each
+ * expense, so shares stay whole cents and always add back up to the exact
+ * total.
  */
 export function splitBalances(
   members: Array<Pick<TripMember, "user_id" | "name">>,
-  expenses: Array<Pick<Expense, "id" | "paid_by" | "amount_cents" | "shared">>,
+  expenses: Array<
+    Pick<Expense, "id" | "paid_by" | "amount_cents" | "shared"> &
+      Partial<Pick<Expense, "participant_ids">>
+  >,
 ): MemberBalance[] {
   const ordered = [...members].sort((a, b) => a.user_id - b.user_id);
   const paid = new Map<number, number>();
@@ -160,7 +187,15 @@ export function splitBalances(
       continue;
     }
 
-    const count = ordered.length;
+    // An expense may name the people it concerns; an empty or unknown list
+    // falls back to the whole trip rather than silently charging nobody.
+    const named = expense.participant_ids ?? null;
+    const sharers = named?.length
+      ? ordered.filter((member) => named.includes(member.user_id))
+      : ordered;
+    const participants = sharers.length > 0 ? sharers : ordered;
+
+    const count = participants.length;
     if (count === 0) continue;
 
     const base = Math.floor(expense.amount_cents / count);
@@ -168,7 +203,7 @@ export function splitBalances(
     const offset = ((expense.id % count) + count) % count;
 
     for (let index = 0; index < count; index += 1) {
-      const member = ordered[(offset + index) % count];
+      const member = participants[(offset + index) % count];
       const extra = remainder > 0 ? 1 : 0;
       remainder -= extra;
       share.set(member.user_id, (share.get(member.user_id) ?? 0) + base + extra);

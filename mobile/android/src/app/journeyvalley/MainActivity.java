@@ -8,10 +8,10 @@ import android.webkit.WebSettings;
 
 /**
  * The whole app is the web bundle in assets/; this class is the shell that
- * hosts it. It adds two things a plain WebView does not give us: durable
- * storage in the app's private directory (localStorage on a file:// origin is
- * not something to trust a trip's data to), and an Android back button that
- * steps back inside the app before closing it.
+ * hosts it. It adds what a plain WebView does not give us: durable storage in
+ * the app's private directory (localStorage on a file:// origin is not
+ * something to trust a trip's data to), the system share sheet, and an Android
+ * back button that steps back inside the app before closing it.
  */
 public class MainActivity extends Activity {
 
@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
 
     web.addJavascriptInterface(new Store(this), "JVStore");
+    web.addJavascriptInterface(new Share(this), "JVShare");
     web.loadUrl("file:///android_asset/index.html");
     setContentView(web);
   }

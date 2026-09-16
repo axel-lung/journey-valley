@@ -1,15 +1,15 @@
 # Journey Valley for Android
 
-A standalone APK: the trips, budgets, agency comparison and cost splitting from the web app,
-running entirely on the phone. No account, no server, no network permission — the app ships with
-no `<uses-permission>` at all.
+A standalone APK, in French: the trips, budgets, checklists, agency comparison and cost splitting
+from the web app, running entirely on the phone. No account, no server, no network permission —
+the app ships with no `<uses-permission>` at all.
 
 ## Install it
 
 1. Copy `dist/journey-valley.apk` to the phone (or download it there).
 2. Open it. Android will ask to allow installs from whatever app you opened it with — this APK is
    signed with a self-signed key, not a Play Store one, so that prompt is expected.
-3. Launch **Journey Valley**. It opens on three demo trips; *Settings → Start from empty* clears
+3. Launch **Journey Valley**. It opens on three demo trips; *Réglages → Repartir de zéro* clears
    them.
 
 Android 5.0 (API 21) and up.
@@ -55,7 +55,9 @@ saving. Only storage differs: the server has SQLite, the phone has a JSON docume
 save cannot corrupt it).
 
 `MainActivity.java` is the rest of the shell: a WebView with JavaScript and DOM storage on, the
-`JVStore` bridge, and a back button that steps back inside the app before closing it.
+`JVStore` and `JVShare` bridges, and a back button that steps back inside the app before closing
+it. `JVShare` hands the settle-up summary to Android's share sheet, so it can go straight to the
+group chat.
 
 ## How it differs from the web app
 

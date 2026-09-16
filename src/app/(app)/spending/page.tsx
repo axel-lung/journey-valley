@@ -1,27 +1,28 @@
 import Link from "next/link";
 import { CategorySpendBars } from "@/components/spend-chart";
-import { Badge, Card, EmptyState, StatTile, TableShell } from "@/components/ui";
+import { Badge, Card, EmptyState, StatTile } from "@/components/ui";
 import { spendByCategory } from "@/lib/analytics";
 import { requireUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import type { ExpenseCategory } from "@/lib/types";
 import { deleteExpenseAction } from "../trips/actions";
 
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
-  food: "Food and drink",
-  transport: "Getting around",
-  lodging: "Stays",
-  activities: "Things to do",
-  shopping: "Shopping",
-  other: "Other",
+  food: "Nourriture et boissons",
+  transport: "Transports sur place",
+  lodging: "Hébergement",
+  activities: "Activités",
+  shopping: "Achats",
+  other: "Divers",
 };
 
 const FILTERS = [
-  { key: "all", label: "Everything" },
-  { key: "mine", label: "Paid by me" },
-  { key: "shared", label: "Split costs" },
-  { key: "personal", label: "Personal" },
+  { key: "all", label: "Tout" },
+  { key: "mine", label: "Payé par moi" },
+  { key: "shared", label: "Partagé" },
+  { key: "personal", label: "Personnel" },
 ];
 
 interface Row {
@@ -81,28 +82,36 @@ export default async function SpendingPage({
     .reduce((sum, row) => sum + row.amount_cents, 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-semibold text-slate-900">Spending</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Everything logged on the road, across every trip you are part of.
+        <h1 className="text-2xl font-semibold text-stone-900">Dépenses</h1>
+        <p className="mt-1.5 text-sm text-stone-500">
+          Tout ce qui a été dépensé sur place, sur l'ensemble de vos voyages.
         </p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile label="In this view" value={formatMoney(total, currency)} hint={`${rows.length} items`} />
-        <StatTile label="You paid" value={formatMoney(paidByMe, currency)} hint="Before anything is settled" />
         <StatTile
-          label="Biggest category"
+          label="Dans cette vue"
+          value={formatMoney(total, currency)}
+          hint={`${rows.length} dépense${rows.length > 1 ? "s" : ""}`}
+        />
+        <StatTile
+          label="Vous avez avancé"
+          value={formatMoney(paidByMe, currency)}
+          hint="Avant tout remboursement entre vous"
+        />
+        <StatTile
+          label="Premier poste"
           value={categories[0] ? CATEGORY_LABEL[categories[0].category] : "—"}
           hint={categories[0] ? formatMoney(categories[0].total_cents, currency) : undefined}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <Card title="By category" className="xl:col-span-1">
+        <Card title="Par catégorie">
           {categories.length === 0 ? (
-            <EmptyState title="Nothing logged yet" />
+            <EmptyState title="Rien de noté pour l'instant" />
           ) : (
             <CategorySpendBars rows={categories} currency={currency} />
           )}
@@ -114,10 +123,10 @@ export default async function SpendingPage({
               <Link
                 key={entry.key}
                 href={`/spending?filter=${entry.key}`}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                className={`rounded-full px-3.5 py-2 text-sm font-medium transition ${
                   entry.key === filter.key
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-600 ring-1 ring-slate-200 ring-inset hover:bg-slate-50"
+                    ? "bg-stone-900 text-white"
+                    : "bg-white text-stone-600 ring-1 ring-stone-200 ring-inset hover:bg-stone-50"
                 }`}
               >
                 {entry.label}
@@ -128,68 +137,59 @@ export default async function SpendingPage({
           <Card>
             {rows.length === 0 ? (
               <EmptyState
-                title="Nothing here"
-                hint="Expenses are logged from a trip — open one and use “Log an expense”."
+                title="Rien ici"
+                hint="Les dépenses se notent depuis un voyage — ouvrez-en un et utilisez « Noter une dépense »."
               />
             ) : (
-              <TableShell
-                head={
-                  <tr>
-                    <th className="px-5 py-2.5">Expense</th>
-                    <th className="px-5 py-2.5">Trip</th>
-                    <th className="px-5 py-2.5">When</th>
-                    <th className="px-5 py-2.5 text-right">Amount</th>
-                    <th className="px-5 py-2.5" />
-                  </tr>
-                }
-              >
+              <ul className="divide-y divide-stone-100">
                 {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3">
-                      <span className="font-medium text-slate-900">{row.description}</span>
-                      <p className="text-xs text-slate-500">
-                        {CATEGORY_LABEL[row.category]} · paid by{" "}
-                        {row.paid_by === user.id ? "you" : row.payer_name}
+                  <li
+                    key={row.id}
+                    className="flex flex-wrap items-start justify-between gap-3 px-5 py-3.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-stone-900">{row.description}</p>
+                      <p className="text-xs text-stone-500">
+                        {CATEGORY_LABEL[row.category]} · {formatDate(row.spent_on)} · payé par{" "}
+                        {row.paid_by === user.id ? "vous" : row.payer_name}
                       </p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <Link
-                        href={`/trips/${row.trip_id}`}
-                        className="text-slate-600 hover:text-slate-900 hover:underline"
-                      >
-                        {row.trip_title}
-                      </Link>
-                      <p className="mt-0.5">
+                      <p className="mt-1 flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/trips/${row.trip_id}`}
+                          className="text-xs text-brand-700 hover:underline"
+                        >
+                          {row.trip_title}
+                        </Link>
                         <Badge
                           className={
                             row.shared
                               ? "bg-brand-50 text-brand-700 ring-brand-200"
-                              : "bg-slate-100 text-slate-600 ring-slate-200"
+                              : "bg-stone-100 text-stone-600 ring-stone-200"
                           }
                         >
-                          {row.shared ? "split" : "personal"}
+                          {row.shared ? "partagée" : "personnelle"}
                         </Badge>
                       </p>
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">{row.spent_on}</td>
-                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                      {formatMoney(row.amount_cents, currency)}
-                    </td>
-                    <td className="px-5 py-3 text-right">
+                    </div>
+
+                    <div className="text-right">
+                      <p className="tabular-nums text-stone-800">
+                        {formatMoney(row.amount_cents, currency)}
+                      </p>
                       <form action={deleteExpenseAction}>
                         <input type="hidden" name="expense_id" value={row.id} />
                         <button
                           type="submit"
-                          className="text-xs text-slate-400 hover:text-rose-600"
-                          aria-label={`Delete ${row.description}`}
+                          className="text-xs text-stone-400 hover:text-rose-600"
+                          aria-label={`Supprimer ${row.description}`}
                         >
-                          Delete
+                          Supprimer
                         </button>
                       </form>
-                    </td>
-                  </tr>
+                    </div>
+                  </li>
                 ))}
-              </TableShell>
+              </ul>
             )}
           </Card>
         </div>

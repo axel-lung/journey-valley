@@ -41,13 +41,21 @@ describe("parseAmountToCents", () => {
 });
 
 describe("formatMoney", () => {
-  it("drops decimals on round amounts and keeps them otherwise", () => {
-    expect(formatMoney(150_000)).toBe("€1,500");
-    expect(formatMoney(150_050)).toBe("€1,500.50");
+  /** French grouping uses narrow no-break spaces; compare on plain ones. */
+  const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, " ");
+
+  it("formats amounts the French way, with the symbol last", () => {
+    expect(plain(formatMoney(150_000))).toBe("1 500 €");
+    expect(plain(formatMoney(150_050))).toBe("1 500,50 €");
+  });
+
+  it("drops the decimals only when the amount is round", () => {
+    expect(plain(formatMoney(2_500))).toBe("25 €");
+    expect(plain(formatMoney(2_501))).toBe("25,01 €");
   });
 
   it("honours the currency", () => {
-    expect(formatMoney(2_500, "USD")).toBe("US$25");
+    expect(plain(formatMoney(2_500, "USD"))).toBe("25 $US");
   });
 });
 

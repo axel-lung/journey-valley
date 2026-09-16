@@ -47,17 +47,20 @@ export function parseAmountToCents(input: string): number | null {
   return Math.round(value * 100);
 }
 
+/** The app speaks French, so amounts are formatted French: 1 500 €. */
+export const LOCALE = "fr-FR";
+
 export function formatMoney(cents: number, currency: Currency = "EUR"): string {
-  return new Intl.NumberFormat("en-GB", {
+  return new Intl.NumberFormat(LOCALE, {
     style: "currency",
     currency,
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100);
 }
 
-/** Compact form for dashboard tiles: 1.2k, 340k, 3.1M. */
+/** Compact form for tiles: 1,2 k€, 340 k€. */
 export function formatMoneyCompact(cents: number, currency: Currency = "EUR"): string {
-  return new Intl.NumberFormat("en-GB", {
+  return new Intl.NumberFormat(LOCALE, {
     style: "currency",
     currency,
     notation: "compact",

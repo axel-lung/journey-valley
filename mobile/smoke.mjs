@@ -60,61 +60,86 @@ try {
   await page.goto(BASE);
 
   // 1. First launch seeds the demo trips.
-  await page.waitForSelector("text=Norway fjords road trip");
-  check("the demo trips are there on first launch", await page.getByText("Lisbon long weekend").isVisible());
+  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
+  check("the demo trips are there on first launch", await page.getByText("Week-end à Lisbonne").isVisible());
 
   // 2. A trip opens with its budget and savings worked out.
-  await page.getByText("Norway fjords road trip").click();
-  await page.waitForSelector("text=Committed");
-  check("the package saving is shown", await page.getByText("Booking it yourself keeps").isVisible());
-  check("the saving matches the quote minus the bookings", await page.getByText("€1,003").first().isVisible());
+  await page.getByText("Road trip dans les fjords norvégiens").click();
+  await page.waitForSelector("text=Engagé");
+  check("the package saving is shown", await page.getByText("Réserver vous-même vous garde").isVisible());
+  check("the saving matches the quote minus the bookings", await page.getByText(/1\s003\s€/).first().isVisible());
 
   // 3. Shared costs settle between the three travellers.
-  check("the settlement is computed", await page.getByText("Fewest payments").isVisible());
-  check("a companion owes their share", await page.getByText("owes €29").first().isVisible());
+  check("the settlement is computed", await page.getByText("Pour être quittes").isVisible());
+  check("a companion owes their share", await page.getByText(/doit 29\s€/).first().isVisible());
 
   // 4. Logging an expense moves the balances.
-  await page.getByRole("button", { name: "Log an expense" }).click();
+  await page.getByRole("button", { name: "Noter une dépense" }).click();
   await page.locator('input[name="amount"]').fill("90");
-  await page.locator('input[name="description"]').fill("Ferry tickets");
-  await page.getByRole("button", { name: "Log it" }).click();
-  await page.waitForSelector("text=Ferry tickets");
-  check("the expense is saved", await page.getByText("Ferry tickets").isVisible());
-  check("the split is recalculated", await page.getByText("owes €59").first().isVisible());
+  await page.locator('input[name="description"]').fill("Billets de ferry");
+  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
+  await page.waitForSelector("text=Billets de ferry");
+  check("the expense is saved", await page.getByText("Billets de ferry").isVisible());
+  check("the split is recalculated", await page.getByText(/doit 59\s€/).first().isVisible());
+
+  // 4b. The preparation checklist.
+  check(
+    "the seeded checklist is there",
+    await page.getByText("Permis de conduire international").isVisible(),
+  );
+  await page.getByRole("button", { name: "Cocher Cartes hors-ligne téléchargées" }).click();
+  await page.waitForSelector('button[aria-label="Décocher Cartes hors-ligne téléchargées"]');
+  check(
+    "a checklist item can be ticked off",
+    await page.getByRole("button", { name: "Décocher Cartes hors-ligne téléchargées" }).isVisible(),
+  );
 
   // 5. It survives a restart — which is the whole point of the storage layer.
   await page.reload();
-  await page.waitForSelector("text=Norway fjords road trip");
-  await page.getByText("Norway fjords road trip").click();
-  check("data survives a restart", await page.getByText("Ferry tickets").isVisible());
+  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
+  await page.getByText("Road trip dans les fjords norvégiens").click();
+  check("data survives a restart", await page.getByText("Billets de ferry").isVisible());
+
+  // 5b. An expense can be split between only some of the travellers.
+  await page.getByRole("button", { name: "Noter une dépense" }).click();
+  const targeted = page.locator("form").filter({ hasText: "Qui participe" });
+  await targeted.locator('input[name="amount"]').fill("30");
+  await targeted.locator('input[name="description"]').fill("Taxi à deux");
+  await targeted.getByRole("button", { name: "Noor", exact: true }).click();
+  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
+  await page.waitForSelector("text=Taxi à deux");
+  check(
+    "an expense can name who it concerns",
+    await page.getByText(/partagée entre Moi, Sam/).first().isVisible(),
+  );
 
   // 6. A new trip can be planned from the phone.
-  await page.getByText("← All trips").click();
-  await page.getByRole("button", { name: "+ Trip" }).click();
-  await page.locator('input[name="title"]').fill("Weekend in Porto");
+  await page.getByText("← Tous les voyages").click();
+  await page.getByRole("button", { name: "+ Voyage" }).click();
+  await page.locator('input[name="title"]').fill("Week-end à Porto");
   await page.locator('input[name="destination_city"]').fill("Porto");
   await page.locator('input[name="budget"]').fill("600");
   await page.locator('input[name="agency_quote"]').fill("950");
-  await page.getByRole("button", { name: "Create" }).click();
-  await page.waitForSelector("text=Weekend in Porto");
-  check("a new trip is created as an idea", await page.getByText("Idea").first().isVisible());
+  await page.getByRole("button", { name: "Créer", exact: true }).click();
+  await page.waitForSelector("text=Week-end à Porto");
+  check("a new trip is created as an idea", await page.getByText("Idée").first().isVisible());
 
   // 7. The stage machine walks it forward.
-  await page.getByRole("button", { name: "Start planning" }).click();
-  await page.waitForSelector("text=Planning");
-  check("stages move forward", await page.getByText("Planning").first().isVisible());
+  await page.getByRole("button", { name: "Passer en préparation" }).click();
+  await page.waitForSelector("text=En préparation");
+  check("stages move forward", await page.getByText("En préparation").first().isVisible());
 
   // 8. The savings tab rolls every compared trip up.
-  await page.getByRole("button", { name: "Savings" }).click();
-  await page.waitForSelector("text=Kept in your pocket");
-  check("the savings tab lists compared trips", await page.getByText("Norway fjords road trip").isVisible());
+  await page.getByRole("button", { name: "Économies" }).click();
+  await page.waitForSelector("text=Gardé dans votre poche");
+  check("the savings tab lists compared trips", await page.getByText("Road trip dans les fjords norvégiens").first().isVisible());
 
   // 9. Resetting brings the demo back.
   page.on("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Reload the demo trips" }).click();
-  await page.waitForSelector("text=Norway fjords road trip");
-  check("the demo can be reloaded", (await page.getByText("Weekend in Porto").count()) === 0);
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await page.getByRole("button", { name: "Recharger la démonstration" }).click();
+  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
+  check("the demo can be reloaded", (await page.getByText("Week-end à Porto").count()) === 0);
 } finally {
   await browser?.close();
   server.close();

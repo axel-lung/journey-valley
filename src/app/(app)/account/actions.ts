@@ -12,7 +12,7 @@ export interface AccountState {
 }
 
 const profileSchema = z.object({
-  name: z.string().trim().min(2, "What should we call you?"),
+  name: z.string().trim().min(2, "Comment vous appelez-vous ?"),
   home_city: z.string().trim().max(80).default(""),
   currency: z.enum(["EUR", "USD", "GBP", "CHF"]),
 });
@@ -25,7 +25,7 @@ export async function updateProfileAction(
 
   const parsed = profileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
+    return { error: parsed.error.issues[0]?.message ?? "Vérifiez les informations et réessayez." };
   }
 
   getDb()

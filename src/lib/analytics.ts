@@ -1,5 +1,8 @@
+import { savingsFromTotals } from "./budget";
 import { getDb } from "./db";
 import { ACTIVE_STAGES } from "./plans";
+import { LOCALE } from "./money";
+import { listTrips } from "./trips";
 import type { ActivityEntry, ExpenseCategory } from "./types";
 
 export interface SpendPoint {
@@ -22,9 +25,10 @@ export interface HomeStats {
   upcoming_count: number;
   nights_away: number;
   committed_cents: number;
-  /** Total saved against agency quotes across every trip you are on. */
+  /** Saved against agency quotes, across trips whose booking is finished. */
   saved_cents: number;
   agency_cents: number;
+  compared_trips: number;
 }
 
 /** Every trip the user is on, whether they created it or were invited. */
@@ -68,26 +72,16 @@ export function homeStats(userId: number): HomeStats {
     )
     .get(userId, userId)!.total;
 
-  // A trip-level quote covers the whole package, so it replaces the per-line
-  // quotes rather than adding to them.
-  const savings = db
-    .prepare<[number], { agency: number; yours: number }>(
-      `SELECT
-         COALESCE(SUM(CASE WHEN t.agency_quote_cents > 0 THEN t.agency_quote_cents
-                           ELSE COALESCE(q.quoted_agency, 0) END), 0) AS agency,
-         COALESCE(SUM(CASE WHEN t.agency_quote_cents > 0 THEN COALESCE(q.total_paid, 0)
-                           ELSE COALESCE(q.quoted_paid, 0) END), 0) AS yours
-       FROM trips t
-       LEFT JOIN (
-         SELECT trip_id,
-                SUM(amount_cents) AS total_paid,
-                SUM(CASE WHEN agency_quote_cents > 0 THEN agency_quote_cents ELSE 0 END) AS quoted_agency,
-                SUM(CASE WHEN agency_quote_cents > 0 THEN amount_cents ELSE 0 END) AS quoted_paid
-           FROM bookings GROUP BY trip_id
-       ) q ON q.trip_id = t.id
-       WHERE t.id IN (${MEMBER_TRIPS}) AND t.stage != 'cancelled'`,
-    )
-    .get(userId)!;
+  // Savings run through the same function the trip pages use, rather than a
+  // second copy of the rule in SQL. Trips still being booked are left out: a
+  // package quote compared against half the bookings is not a saving yet.
+  const comparable = listTrips({ userId })
+    .filter((trip) => trip.stage !== "cancelled")
+    .map((trip) => savingsFromTotals(trip))
+    .filter((savings) => savings.basis !== "none" && !savings.provisional);
+
+  const agencyTotal = comparable.reduce((sum, savings) => sum + savings.agency_cents, 0);
+  const savedTotal = comparable.reduce((sum, savings) => sum + savings.saved_cents, 0);
 
   return {
     trips_total: tripsTotal,
@@ -96,8 +90,9 @@ export function homeStats(userId: number): HomeStats {
     upcoming_count: upcoming,
     nights_away: Math.round(nights),
     committed_cents: committed,
-    agency_cents: savings.agency,
-    saved_cents: savings.agency - savings.yours,
+    agency_cents: agencyTotal,
+    saved_cents: savedTotal,
+    compared_trips: comparable.length,
   };
 }
 
@@ -131,7 +126,7 @@ export function monthlySpend(userId: number, months = 6): SpendPoint[] {
     const month = cursor.toISOString().slice(0, 7);
     points.push({
       month,
-      label: cursor.toLocaleString("en-GB", { month: "short", timeZone: "UTC" }),
+      label: cursor.toLocaleString(LOCALE, { month: "short", timeZone: "UTC" }),
       booked_cents: bookedByMonth.get(month) ?? 0,
       spent_cents: spentByMonth.get(month) ?? 0,
     });

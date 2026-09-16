@@ -3,13 +3,22 @@
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
-  --color-brand-50: oklch(0.97 0.02 255);
-  --color-brand-100: oklch(0.93 0.04 255);
-  --color-brand-200: oklch(0.87 0.07 255);
-  --color-brand-500: oklch(0.6 0.16 262);
-  --color-brand-600: oklch(0.53 0.18 262);
-  --color-brand-700: oklch(0.46 0.17 262);
-  --color-brand-900: oklch(0.31 0.11 262);
+
+  /* Ocean blue — calmer and warmer than the corporate indigo it replaces. */
+  --color-brand-50: oklch(0.97 0.02 232);
+  --color-brand-100: oklch(0.93 0.045 232);
+  --color-brand-200: oklch(0.87 0.07 232);
+  --color-brand-300: oklch(0.78 0.1 232);
+  --color-brand-500: oklch(0.62 0.13 235);
+  --color-brand-600: oklch(0.54 0.14 238);
+  --color-brand-700: oklch(0.46 0.13 240);
+  --color-brand-800: oklch(0.38 0.11 242);
+  --color-brand-900: oklch(0.29 0.08 244);
+
+  /* Sunset — used sparingly, for the "what it would have cost" side. */
+  --color-sun-100: oklch(0.93 0.05 48);
+  --color-sun-500: oklch(0.72 0.15 45);
+  --color-sun-600: oklch(0.64 0.16 42);
 }
 
 html,
@@ -18,12 +27,21 @@ body {
 }
 
 body {
-  background-color: var(--color-slate-50);
-  color: var(--color-slate-900);
+  /* Warm neutral rather than the cold slate of a back-office. */
+  background-color: var(--color-stone-50);
+  color: var(--color-stone-900);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Native date inputs are cramped without this in Safari. */
 input[type="date"] {
-  min-height: 2.375rem;
+  min-height: 2.5rem;
+}
+
+/* Inputs under 16px make mobile browsers zoom on focus. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }

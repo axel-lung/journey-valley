@@ -10,6 +10,7 @@
  * The shapes deliberately match the web app's row types, so `budget.ts` and
  * `stages.ts` are shared between the two builds without adapters.
  */
+import { CHECKLIST_TEMPLATE } from "../../src/lib/checklist";
 import type {
   Booking,
   BookingType,
@@ -27,6 +28,14 @@ export interface LocalTraveller {
   is_me: number;
 }
 
+export interface LocalChecklistItem {
+  id: number;
+  trip_id: number;
+  label: string;
+  done: number;
+  position: number;
+}
+
 export interface Database {
   version: 1;
   next_id: number;
@@ -34,6 +43,7 @@ export interface Database {
   travellers: LocalTraveller[];
   bookings: Booking[];
   expenses: Expense[];
+  checklist: LocalChecklistItem[];
 }
 
 declare global {
@@ -42,6 +52,8 @@ declare global {
     JVStore?: { load(): string; save(json: string): void };
     /** Registered by the app so the shell's back button can step back. */
     JVBack?: () => boolean;
+    /** Injected by the Android shell: opens the system share sheet. */
+    JVShare?: { text(body: string): void };
   }
 }
 
@@ -77,7 +89,8 @@ function load(): Database {
   try {
     const parsed = JSON.parse(raw) as Database;
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.trips)) return seed();
-    return parsed;
+    // The checklist arrived after the first release; older documents lack it.
+    return { ...parsed, checklist: parsed.checklist ?? [] };
   } catch {
     return seed();
   }
@@ -97,7 +110,15 @@ export function resetToDemo(): void {
 }
 
 export function clearAll(): void {
-  db = { version: 1, next_id: 1, trips: [], travellers: [], bookings: [], expenses: [] };
+  db = {
+    version: 1,
+    next_id: 1,
+    trips: [],
+    travellers: [],
+    bookings: [],
+    expenses: [],
+    checklist: [],
+  };
   persist();
 }
 
@@ -166,7 +187,7 @@ export function createTrip(input: NewTripInput): Trip {
     created_at: today(),
   };
   db.trips.push(trip);
-  db.travellers.push({ trip_id: trip.id, user_id: id(), name: "Me", is_me: 1 });
+  db.travellers.push({ trip_id: trip.id, user_id: id(), name: "Moi", is_me: 1 });
   persist();
   return trip;
 }
@@ -182,8 +203,41 @@ export function setStage(tripId: number, stage: TripStage): void {
   updateTrip(tripId, { stage });
 }
 
+export function listChecklist(tripId: number): LocalChecklistItem[] {
+  return db.checklist
+    .filter((item) => item.trip_id === tripId)
+    .sort((a, b) => a.done - b.done || a.position - b.position || a.id - b.id);
+}
+
+export function addChecklistItem(tripId: number, label: string): void {
+  const position = listChecklist(tripId).length;
+  db.checklist.push({ id: id(), trip_id: tripId, label, done: 0, position });
+  persist();
+}
+
+export function addChecklistTemplate(tripId: number): void {
+  const existing = new Set(listChecklist(tripId).map((item) => item.label));
+  // Adding the template twice must not double every line.
+  for (const label of CHECKLIST_TEMPLATE.filter((label) => !existing.has(label))) {
+    addChecklistItem(tripId, label);
+  }
+}
+
+export function toggleChecklistItem(itemId: number): void {
+  const item = db.checklist.find((entry) => entry.id === itemId);
+  if (!item) return;
+  item.done = item.done ? 0 : 1;
+  persist();
+}
+
+export function deleteChecklistItem(itemId: number): void {
+  db.checklist = db.checklist.filter((item) => item.id !== itemId);
+  persist();
+}
+
 export function deleteTrip(tripId: number): void {
   db.trips = db.trips.filter((trip) => trip.id !== tripId);
+  db.checklist = db.checklist.filter((item) => item.trip_id !== tripId);
   db.travellers = db.travellers.filter((traveller) => traveller.trip_id !== tripId);
   db.bookings = db.bookings.filter((booking) => booking.trip_id !== tripId);
   db.expenses = db.expenses.filter((expense) => expense.trip_id !== tripId);
@@ -211,6 +265,12 @@ export function removeTraveller(tripId: number, userId: number): void {
   db.expenses = db.expenses.filter(
     (expense) => !(expense.trip_id === tripId && expense.paid_by === userId),
   );
+  // And they must drop out of the expenses that named them.
+  for (const expense of db.expenses) {
+    if (expense.trip_id !== tripId || !expense.participant_ids) continue;
+    const remaining = expense.participant_ids.filter((entry) => entry !== userId);
+    expense.participant_ids = remaining.length > 0 ? remaining : null;
+  }
 
   const trip = getTrip(tripId);
   if (trip) trip.travellers = Math.max(1, listTravellers(tripId).length);
@@ -261,6 +321,8 @@ export interface NewExpenseInput {
   spent_on: string;
   amount_cents: number;
   shared: boolean;
+  /** Null means everyone on the trip. */
+  participant_ids?: number[] | null;
 }
 
 export function addExpense(input: NewExpenseInput): void {
@@ -273,6 +335,7 @@ export function addExpense(input: NewExpenseInput): void {
     spent_on: input.spent_on,
     amount_cents: input.amount_cents,
     shared: input.shared ? 1 : 0,
+    participant_ids: input.participant_ids ?? null,
     receipt_name: null,
     created_at: today(),
   });
@@ -301,13 +364,14 @@ function seed(): Database {
     travellers: [],
     bookings: [],
     expenses: [],
+    checklist: [],
   };
   db = fresh;
 
   const lisbon = createTrip({
-    title: "Lisbon long weekend",
-    summary: "Four days of pastéis, tiles and the tram up to Graça.",
-    destination_city: "Lisbon",
+    title: "Week-end à Lisbonne",
+    summary: "Quatre jours de pastéis, d’azulejos et le tram jusqu’à Graça.",
+    destination_city: "Lisbonne",
     destination_country: "Portugal",
     start_date: today(-96),
     end_date: today(-92),
@@ -321,7 +385,7 @@ function seed(): Database {
     trip_id: lisbon.id,
     type: "flight",
     vendor: "TAP",
-    description: "LYS → LIS return, two seats",
+    description: "LYS → LIS aller-retour, deux places",
     start_at: today(-96),
     end_at: today(-92),
     amount_cents: 24_600,
@@ -332,7 +396,7 @@ function seed(): Database {
     trip_id: lisbon.id,
     type: "stay",
     vendor: "Alfama apartment",
-    description: "4 nights, whole flat",
+    description: "4 nuits, appartement entier",
     start_at: today(-96),
     end_at: today(-92),
     amount_cents: 32_800,
@@ -343,7 +407,7 @@ function seed(): Database {
     trip_id: lisbon.id,
     paid_by: me.user_id,
     category: "food",
-    description: "Dinner in Bairro Alto",
+    description: "Dîner au Bairro Alto",
     spent_on: today(-95),
     amount_cents: 6_400,
     shared: true,
@@ -352,7 +416,7 @@ function seed(): Database {
     trip_id: lisbon.id,
     paid_by: sam.user_id,
     category: "transport",
-    description: "Tram passes",
+    description: "Forfaits tram",
     spent_on: today(-95),
     amount_cents: 2_400,
     shared: true,
@@ -361,17 +425,17 @@ function seed(): Database {
     trip_id: lisbon.id,
     paid_by: me.user_id,
     category: "shopping",
-    description: "Tiles for the kitchen",
+    description: "Azulejos pour la cuisine",
     spent_on: today(-93),
     amount_cents: 4_800,
     shared: false,
   });
 
   const norway = createTrip({
-    title: "Norway fjords road trip",
-    summary: "Bergen to Ålesund by hire car, five stops, no tour bus.",
+    title: "Road trip dans les fjords norvégiens",
+    summary: "Bergen → Ålesund en voiture, cinq étapes, sans car de tourisme.",
     destination_city: "Bergen",
-    destination_country: "Norway",
+    destination_country: "Norvège",
     start_date: today(26),
     end_date: today(35),
     budget_cents: 210_000,
@@ -384,7 +448,7 @@ function seed(): Database {
     trip_id: norway.id,
     type: "flight",
     vendor: "Norwegian",
-    description: "LYS → BGO return, three seats",
+    description: "LYS → BGO aller-retour, trois places",
     start_at: today(26),
     end_at: today(35),
     amount_cents: 62_400,
@@ -395,7 +459,7 @@ function seed(): Database {
     trip_id: norway.id,
     type: "transport",
     vendor: "Hertz",
-    description: "Estate car, 9 days",
+    description: "Break, 9 jours",
     start_at: today(26),
     end_at: today(35),
     amount_cents: 47_800,
@@ -405,8 +469,8 @@ function seed(): Database {
   addBooking({
     trip_id: norway.id,
     type: "stay",
-    vendor: "Fjord cabins",
-    description: "9 nights across four stops",
+    vendor: "Chalets des fjords",
+    description: "9 nuits sur quatre étapes",
     start_at: today(26),
     end_at: today(35),
     amount_cents: 78_500,
@@ -418,17 +482,22 @@ function seed(): Database {
     trip_id: norway.id,
     paid_by: norwayTravellers[0].user_id,
     category: "other",
-    description: "Travel insurance, three people",
+    description: "Assurance voyage, trois personnes",
     spent_on: today(-4),
     amount_cents: 8_700,
     shared: true,
   });
 
+  addChecklistItem(norway.id, "Permis de conduire international");
+  addChecklistItem(norway.id, "Réserver le ferry de Geiranger");
+  addChecklistItem(norway.id, "Cartes hors-ligne téléchargées");
+  toggleChecklistItem(listChecklist(norway.id)[0].id);
+
   const kyoto = createTrip({
-    title: "Kyoto in autumn",
-    summary: "Two weeks chasing the maple season, rail pass instead of a tour.",
+    title: "Kyoto en automne",
+    summary: "Deux semaines à courir après les érables, Rail Pass plutôt qu’un circuit organisé.",
     destination_city: "Kyoto",
-    destination_country: "Japan",
+    destination_country: "Japon",
     start_date: today(112),
     end_date: today(126),
     budget_cents: 340_000,
@@ -440,7 +509,7 @@ function seed(): Database {
     trip_id: kyoto.id,
     type: "flight",
     vendor: "ANA",
-    description: "CDG → KIX return, two seats",
+    description: "CDG → KIX aller-retour, deux places",
     start_at: today(112),
     end_at: today(126),
     amount_cents: 148_000,

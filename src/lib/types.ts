@@ -85,8 +85,13 @@ export interface Expense {
   description: string;
   spent_on: string;
   amount_cents: number;
-  /** 1 when the cost is split across everyone on the trip. */
+  /** 1 when the cost is split rather than carried by whoever paid. */
   shared: number;
+  /**
+   * The travellers this expense concerns. `null` means everyone on the trip —
+   * the common case, so it stays the default rather than a stored list.
+   */
+  participant_ids: number[] | null;
   receipt_name: string | null;
   created_at: string;
 }
@@ -112,4 +117,14 @@ export interface TripSummary extends Trip {
   /** What you paid for exactly those quoted bookings. */
   quoted_paid_cents: number;
   my_role: MemberRole;
+}
+
+export interface ChecklistItem {
+  id: number;
+  trip_id: number;
+  label: string;
+  done: number;
+  /** Keeps a hand-sorted list stable; ties fall back to id. */
+  position: number;
+  created_at: string;
 }

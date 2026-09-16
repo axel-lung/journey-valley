@@ -15,36 +15,44 @@ export function TripForm({ currency }: { currency: string }) {
     <form action={action} className="space-y-5">
       <ErrorNotice message={state.error} />
 
-      <Field label="What are you calling it?" hint={error("title")}>
-        <input name="title" required placeholder="Norway fjords road trip" className={inputClass} />
+      <Field label="Comment vous l'appelez ?" hint={error("title")}>
+        <input
+          name="title"
+          required
+          placeholder="Road trip dans les fjords norvégiens"
+          className={inputClass}
+        />
       </Field>
 
-      <Field label="The idea" hint={error("summary") ?? "A line to remind you why this trip exists."}>
+      <Field
+        label="L'idée"
+        hint={error("summary") ?? "Une phrase pour vous rappeler pourquoi ce voyage existe."}
+      >
         <textarea
           name="summary"
           rows={2}
-          placeholder="Bergen to Ålesund by hire car, five stops, no tour bus."
+          placeholder="Bergen → Ålesund en voiture, cinq étapes, sans car de tourisme."
           className={inputClass}
         />
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="City" hint={error("destination_city")}>
+        <Field label="Ville" hint={error("destination_city")}>
           <input name="destination_city" required placeholder="Bergen" className={inputClass} />
         </Field>
-        <Field label="Country" hint={error("destination_country")}>
-          <input name="destination_country" required placeholder="Norway" className={inputClass} />
+        <Field label="Pays" hint={error("destination_country")}>
+          <input name="destination_country" required placeholder="Norvège" className={inputClass} />
         </Field>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-3">
-        <Field label="Leaving" hint={error("start_date")}>
+        <Field label="Départ" hint={error("start_date")}>
           <input name="start_date" type="date" required defaultValue={today} className={inputClass} />
         </Field>
-        <Field label="Back" hint={error("end_date")}>
+        <Field label="Retour" hint={error("end_date")}>
           <input name="end_date" type="date" required defaultValue={today} className={inputClass} />
         </Field>
-        <Field label="Travellers" hint={error("travellers")}>
+        <Field label="Voyageurs" hint={error("travellers")}>
           <input
             name="travellers"
             type="number"
@@ -59,26 +67,26 @@ export function TripForm({ currency }: { currency: string }) {
       <div className="grid gap-5 sm:grid-cols-2">
         <Field
           label={`Budget (${currency})`}
-          hint={error("budget") ?? "Optional. What you would rather not go past."}
+          hint={error("budget") ?? "Facultatif. Ce que vous préférez ne pas dépasser."}
         >
           <input name="budget" inputMode="decimal" placeholder="2 100" className={inputClass} />
         </Field>
 
         <Field
-          label={`Agency quote (${currency})`}
+          label={`Devis agence (${currency})`}
           hint={
             error("agency_quote") ??
-            "Optional, and the point of all this: what a packaged version of this trip was quoted at."
+            "Facultatif, et c'est tout l'intérêt : le prix du même voyage en formule tout compris."
           }
         >
           <input name="agency_quote" inputMode="decimal" placeholder="2 890" className={inputClass} />
         </Field>
       </div>
 
-      <div className="flex items-center gap-3 pt-1">
-        <SubmitButton pendingLabel="Creating…">Create the trip</SubmitButton>
-        <p className="text-xs text-slate-500">
-          It starts as an idea — add bookings, companions and dates as they firm up.
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <SubmitButton pendingLabel="Création…">Créer le voyage</SubmitButton>
+        <p className="text-xs text-stone-500">
+          Il démarre comme une idée — réservations, compagnons et checklist viendront après.
         </p>
       </div>
     </form>
