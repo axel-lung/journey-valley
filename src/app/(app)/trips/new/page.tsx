@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { Card } from "@/components/ui";
+import { listClients } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { canCreateTrip, PLANS } from "@/lib/plans";
 import { countActiveTrips } from "@/lib/trips";
 import { TripForm } from "./trip-form";
 
-export default async function NewTripPage() {
+export default async function NewTripPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ client?: string }>;
+}) {
   const user = await requireUser();
+  const { client } = await searchParams;
+  const clients = user.agency_id ? listClients(user.agency_id) : [];
   const active = countActiveTrips(user.id);
   const limit = canCreateTrip(user.plan, active);
   const plan = PLANS[user.plan];
@@ -17,7 +24,7 @@ export default async function NewTripPage() {
         <Link href="/trips" className="text-sm text-stone-500 hover:text-stone-900">
           ← Retour aux voyages
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-stone-900">Un nouveau voyage</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-stone-900">Un nouveau dossier</h1>
         <p className="mt-1.5 text-sm text-stone-500">
           Seuls le nom et la destination sont obligatoires. Le reste peut attendre.
         </p>
@@ -39,7 +46,11 @@ export default async function NewTripPage() {
       ) : (
         <Card>
           <div className="px-5 py-5">
-            <TripForm currency={user.currency} />
+            <TripForm
+              currency={user.currency}
+              clients={clients}
+              defaultClientId={Number(client) || undefined}
+            />
           </div>
         </Card>
       )}

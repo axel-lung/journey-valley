@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getAgency, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { budgetStatus, settlementPlan, splitBalances, tripNights } from "@/lib/budget";
 import { formatDate, formatDateRange, formatNights, formatTravellers } from "@/lib/format";
@@ -51,6 +52,16 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
   );
   const nameById = new Map(members.map((member) => [member.user_id, member.name]));
 
+  // Le même carnet, deux lectures. Le conseiller voit ses coûts d'achat ; le
+  // voyageur voit le prix qu'il paie, et rien d'autre — c'est le document qu'on
+  // lui remet, pas la fiche interne du dossier.
+  const advisor = isAdvisor(user);
+  const agency = getAgency(user.agency_id);
+  const sellCents =
+    trip.agency_quote_cents > 0
+      ? trip.agency_quote_cents
+      : bookings.reduce((total, booking) => total + booking.agency_quote_cents, 0);
+
   return (
     <div className="mx-auto max-w-3xl space-y-8 print:max-w-none">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -73,8 +84,12 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
           {formatTravellers(members.length)}
         </p>
         <p className="mt-1 text-sm text-stone-500">
-          {STAGE_LABEL[trip.stage]} · {formatMoney(budget.committed_cents, currency)} engagés ·{" "}
-          {formatMoney(budget.per_traveller_cents, currency)} par personne
+          {STAGE_LABEL[trip.stage]}
+          {advisor
+            ? ` · ${formatMoney(budget.committed_cents, currency)} d'achats · ${formatMoney(budget.per_traveller_cents, currency)} par personne`
+            : sellCents > 0
+              ? ` · ${formatMoney(sellCents, currency)}`
+              : ""}
         </p>
         {trip.summary && <p className="mt-3 text-sm text-stone-700">{trip.summary}</p>}
       </header>
@@ -117,7 +132,7 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
                 <th className="py-2">Quoi</th>
                 <th className="py-2">Quand</th>
                 <th className="py-2">Référence</th>
-                <th className="py-2 text-right">Montant</th>
+                <th className="py-2 text-right">{advisor ? "Achat" : "Prix"}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -136,7 +151,11 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
                   </td>
                   <td className="py-2 pr-3 text-stone-600">{booking.reference ?? "—"}</td>
                   <td className="py-2 text-right tabular-nums text-stone-800">
-                    {formatMoney(booking.amount_cents, currency)}
+                    {advisor
+                      ? formatMoney(booking.amount_cents, currency)
+                      : booking.agency_quote_cents > 0
+                        ? formatMoney(booking.agency_quote_cents, currency)
+                        : "—"}
                   </td>
                 </tr>
               ))}

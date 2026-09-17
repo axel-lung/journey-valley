@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getClient } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { getDb, recordActivity } from "@/lib/db";
 import { parseAmountToCents } from "@/lib/money";
@@ -36,6 +37,7 @@ const tripSchema = z
     end_date: isoDate,
     budget: z.string().trim().default(""),
     agency_quote: z.string().trim().default(""),
+    client_id: z.string().trim().default(""),
     travellers: z.coerce.number().int().min(1).max(20).default(1),
   })
   .refine((value) => value.end_date >= value.start_date, {
@@ -68,17 +70,24 @@ export async function createTripAction(_prev: FormState, formData: FormData): Pr
     return { fieldErrors: { agency_quote: "Un montant comme 2 400, ou laissez vide." } };
   }
 
+  // Un dossier appartient à un client de l'agence, et à personne d'autre : un
+  // identifiant venu d'ailleurs est ignoré plutôt que rattaché de force.
+  const clientId = Number(parsed.data.client_id) || null;
+  const client =
+    clientId && user.agency_id ? getClient(user.agency_id, clientId) : null;
+
   const db = getDb();
   const tripId = db.transaction(() => {
     const result = db
       .prepare(
-        `INSERT INTO trips (owner_id, title, summary, destination_city, destination_country,
-                            start_date, end_date, stage, currency, budget_cents,
-                            agency_quote_cents, travellers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'idea', ?, ?, ?, ?)`,
+        `INSERT INTO trips (owner_id, client_id, title, summary, destination_city,
+                            destination_country, start_date, end_date, stage, currency,
+                            budget_cents, agency_quote_cents, travellers)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idea', ?, ?, ?, ?)`,
       )
       .run(
         user.id,
+        client?.id ?? null,
         parsed.data.title,
         parsed.data.summary,
         parsed.data.destination_city,

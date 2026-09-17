@@ -1,7 +1,7 @@
 /**
  * End-to-end smoke test: boots the built app against a throwaway database and
- * walks the paths that matter — sign up, plan a trip, book something against an
- * agency quote, log a split expense, and see the plan limit and the settle-up
+ * walks the paths that matter — open an agency, file a client, build a dossier,
+ * price it, read the margin, and check that the traveller never sees a cost
  * maths do their job.
  *
  *   npm run build && npm run smoke
@@ -82,13 +82,13 @@ async function waitForServer() {
   throw new Error("Server did not start in time");
 }
 
-async function signIn(page, email, password) {
+async function signIn(page, email, password, landing = "**/dashboard") {
   await page.goto(`${BASE}/login`);
   await page.getByRole("button", { name: "J'ai un compte" }).click();
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
   await page.locator("form").getByRole("button", { name: "Se connecter" }).click();
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(landing);
 }
 
 async function signOut(page) {
@@ -119,10 +119,22 @@ try {
   await page.fill('input[name="name"]', "Smoke Tester");
   await page.fill('input[name="email"]', NEW_EMAIL);
   await page.fill('input[name="password"]', NEW_PASSWORD);
+  await page.fill('input[name="agency_name"]', "Agence Témoin");
   await page.fill('input[name="home_city"]', "Lyon");
   await page.getByRole("button", { name: "Créer mon compte gratuit" }).click();
   await page.waitForURL("**/dashboard");
-  check("a new account can sign up and lands on the overview", await page.getByText("Gardé dans votre poche").first().isVisible());
+  check(
+    "signing up opens an agency and lands on its dashboard",
+    await page.getByText("Marge sur les dossiers réservés").first().isVisible(),
+  );
+
+  // 1b. A client goes into the file before a dossier exists.
+  await page.goto(`${BASE}/clients`);
+  await page.fill('input[name="name"]', "Sam Ortega");
+  await page.fill('input[name="email"]', "sam@journeyvalley.app");
+  await page.getByRole("button", { name: "Créer le client" }).click();
+  await page.waitForURL(/\/clients\/\d+$/);
+  check("a client can be filed", await page.getByText("Sam Ortega").first().isVisible());
 
   // 2. Plan a trip with a budget and an agency quote.
   await createTrip(page, {
@@ -130,11 +142,10 @@ try {
     city: "Oslo",
     country: "Norway",
     budget: "1 500",
-    quote: "2 000",
   });
   await page.waitForURL(/\/trips\/\d+$/);
   const tripUrl = page.url();
-  check("a trip starts as an idea", await page.getByText("Idée").first().isVisible());
+  check("a dossier starts as an idea", await page.getByText("Idée").first().isVisible());
 
   // 3. A booking with its own price feeds the budget and the savings maths.
   await page.getByText("Ajouter une réservation").click();
@@ -142,35 +153,34 @@ try {
   const bookingForm = page.locator('form:has(select[name="type"])');
   await bookingForm.locator('input[name="vendor"]').fill("Norwegian");
   await bookingForm.locator('input[name="amount"]').fill("1 200");
+  await bookingForm.locator('input[name="agency_quote"]').fill("1 500");
   await bookingForm.locator('input[name="start_at"]').fill("2026-12-01");
   await page.getByRole("button", { name: "Ajouter au voyage" }).click();
   await page.waitForSelector("text=Norwegian");
-  check("the booking lands on the trip", await page.getByText("Norwegian").first().isVisible());
-  // The trip is still an idea, so the package comparison must say it is provisional.
+  check("the booking lands on the dossier", await page.getByText("Norwegian").first().isVisible());
+
+  // Acheté 1 200, vendu 1 500 : 300 de marge, soit 20 % de marque et 25 % de
+  // marge. Les deux taux doivent être distincts à l'écran.
   check(
-    "a package quote on an unbooked trip is flagged provisional",
-    await page.getByText("n'est pas entièrement réservé").isVisible(),
+    "the margin is the sell price minus the cost",
+    await page.getByText(/300\s€/).first().isVisible(),
+  );
+  check(
+    "the two rates are told apart",
+    (await page.getByText("20 %").first().isVisible()) &&
+      (await page.getByText("25 %").first().isVisible()),
   );
 
   // 4. Stage changes follow the machine: idea → planning → booked.
   await page.getByRole("button", { name: "Passer en préparation" }).click();
   await page.waitForSelector("text=En préparation");
   await page.getByRole("button", { name: "Tout est réservé" }).click();
-  // "Réservé" also appears in the bookings heading, so wait on the saving copy
-  // that only a finished booking produces.
-  await page.waitForSelector("text=Réserver vous-même vous garde");
+  // « Réservé » apparaît aussi dans le titre des réservations : on attend le
+  // bouton que seule l'étape suivante fait apparaître.
+  await page.waitForSelector("text=C'est parti !");
   check(
-    "the trip walks through its stages",
+    "the dossier walks through its stages",
     await page.getByRole("button", { name: "C'est parti !" }).isVisible(),
-  );
-  // Once booked, the same comparison becomes a real saving.
-  check(
-    "the saving becomes final once everything is booked",
-    await page.getByText("Réserver vous-même vous garde").isVisible(),
-  );
-  check(
-    "the saving is the quote minus what was paid",
-    await page.getByText("800 €").first().isVisible(),
   );
 
   // 5. On-trip spending shows up against the budget.
@@ -207,6 +217,13 @@ try {
   check(
     "a search result can be imported as a booking",
     (await page.locator("text=/^Réservations \\(\\d+\\)$/").innerText()) !== bookingsBefore,
+  );
+
+  // La ligne importée arrive sans prix de vente : la marge devient un plancher,
+  // et l'écran doit le dire plutôt que d'annoncer un résultat faux.
+  check(
+    "an unpriced line makes the margin a floor, and says so",
+    await page.getByText(/sans prix de vente/).first().isVisible(),
   );
 
   await searchForm.locator('input[name="destination"]').fill("Oslo");
@@ -277,9 +294,17 @@ try {
     await page.getByRole("button", { name: "Décocher Assurance voyage" }).isVisible(),
   );
 
-  // 7. The savings page rolls trips up.
+  // 7. La page Marges additionne les dossiers engagés.
+  await page.goto(`${BASE}/marges`);
+  check("the margins page lists the dossier", await page.getByText("Smoke test — Oslo").first().isVisible());
+  check(
+    "the margins page totals the agency",
+    await page.getByText("Marge totale").first().isVisible(),
+  );
+  // L'ancienne adresse grand public mène à la même vérité, côté agence.
   await page.goto(`${BASE}/savings`);
-  check("the savings page lists the trip", await page.getByText("Smoke test — Oslo").first().isVisible());
+  await page.waitForURL("**/marges");
+  check("the old savings page now points at the margins", page.url().endsWith("/marges"));
 
   // 7. The free plan stops at two active trips.
   await createTrip(page, { title: "Smoke test — Porto", city: "Porto", country: "Portugal" });
@@ -327,6 +352,37 @@ try {
     "an expense can name who it concerns",
     await page.getByText(/partagée entre Camille/).first().isVisible(),
   );
+
+  // 13. La vue client : le voyageur voit son voyage, jamais ce qu'il a coûté.
+  //
+  // C'est la promesse faite au conseiller, donc elle se vérifie sur le texte
+  // rendu, pas sur une classe CSS : le coût d'achat ne doit apparaître nulle
+  // part sur la page — ni le prix d'achat du vol de Lisbonne, ni l'étiquette.
+  await signOut(page);
+  await signIn(page, "sam@journeyvalley.app", DEMO_PASSWORD, "**/mon-voyage");
+  check(
+    "a client lands in their own travel space",
+    await page.getByText("Préparés avec votre conseiller").isVisible(),
+  );
+
+  await page.getByText("Week-end à Lisbonne").click();
+  await page.waitForURL(/\/mon-voyage\/\d+$/);
+  const clientPage = await page.locator("body").innerText();
+  check(
+    "the client sees their programme",
+    await page.getByText("Votre programme").isVisible(),
+  );
+  check(
+    "the client is never shown a purchase cost",
+    !clientPage.includes("246") && !clientPage.includes("Coût") && !clientPage.includes("Marge"),
+    clientPage.match(/.{0,40}(246|Coût|Marge).{0,40}/)?.[0] ?? "",
+  );
+
+  // Le dossier du conseiller lui est fermé : il est renvoyé vers son espace.
+  const dossierUrl = page.url().replace("/mon-voyage/", "/trips/");
+  await page.goto(dossierUrl);
+  await page.waitForURL(/\/mon-voyage\/\d+$/);
+  check("a client cannot open the advisor's dossier", page.url().includes("/mon-voyage/"));
 } finally {
   await browser?.close();
   try {

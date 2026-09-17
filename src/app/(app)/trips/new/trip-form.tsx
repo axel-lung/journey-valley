@@ -5,7 +5,16 @@ import { SubmitButton } from "@/components/submit-button";
 import { ErrorNotice, Field, inputClass } from "@/components/ui";
 import { createTripAction, type FormState } from "../actions";
 
-export function TripForm({ currency }: { currency: string }) {
+export function TripForm({
+  currency,
+  clients,
+  defaultClientId,
+}: {
+  currency: string;
+  /** Les clients de l'agence ; vide pour un compte sans agence. */
+  clients: Array<{ id: number; name: string }>;
+  defaultClientId?: number;
+}) {
   const [state, action] = useActionState<FormState, FormData>(createTripAction, {});
   const error = (field: string) => state.fieldErrors?.[field];
 
@@ -14,6 +23,22 @@ export function TripForm({ currency }: { currency: string }) {
   return (
     <form action={action} className="space-y-5">
       <ErrorNotice message={state.error} />
+
+      {clients.length > 0 && (
+        <Field
+          label="Pour quel client ?"
+          hint={error("client_id") ?? "Le dossier rejoint sa fiche, et compte dans son chiffre."}
+        >
+          <select name="client_id" defaultValue={defaultClientId ?? ""} className={inputClass}>
+            <option value="">— Aucun pour l'instant —</option>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       <Field label="Comment vous l'appelez ?" hint={error("title")}>
         <input
@@ -66,17 +91,17 @@ export function TripForm({ currency }: { currency: string }) {
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field
-          label={`Budget (${currency})`}
-          hint={error("budget") ?? "Facultatif. Ce que vous préférez ne pas dépasser."}
+          label={`Budget du client (${currency})`}
+          hint={error("budget") ?? "Facultatif. L'enveloppe annoncée, pour ne pas la dépasser."}
         >
           <input name="budget" inputMode="decimal" placeholder="2 100" className={inputClass} />
         </Field>
 
         <Field
-          label={`Devis agence (${currency})`}
+          label={`Prix de vente du forfait (${currency})`}
           hint={
             error("agency_quote") ??
-            "Facultatif, et c'est tout l'intérêt : le prix du même voyage en formule tout compris."
+            "Facultatif. Un forfait posé ici l'emporte sur la somme des lignes pour le calcul de la marge."
           }
         >
           <input name="agency_quote" inputMode="decimal" placeholder="2 890" className={inputClass} />

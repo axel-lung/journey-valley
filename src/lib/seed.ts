@@ -5,9 +5,13 @@ export const DEMO_PASSWORD = "journey2026";
 export const DEMO_EMAIL = "camille@journeyvalley.app";
 
 /**
- * Fills a fresh database with one household's travel history so the app is
- * usable the moment it boots. Runs only when there is no user yet, so
- * restarting the server never duplicates or overwrites real data.
+ * Fills a fresh database with a small agency at work — a conseillère, ses
+ * clients, leurs dossiers — pour que l'application soit démontrable dès le
+ * premier démarrage. Ne s'exécute que si aucun compte n'existe, donc relancer
+ * le serveur ne duplique et n'écrase jamais de vraies données.
+ *
+ * Les deux clients ont un compte : c'est ce qui permet de montrer les deux vues
+ * côte à côte, celle du conseiller et celle du voyageur.
  */
 export function seedIfEmpty(db: Database.Database): void {
   const existing = db.prepare<[], { count: number }>(`SELECT COUNT(*) AS count FROM users`).get();
@@ -15,23 +19,71 @@ export function seedIfEmpty(db: Database.Database): void {
 
   const seed = db.transaction(() => {
     const password = hashPassword(DEMO_PASSWORD);
-    const insertUser = db.prepare(
-      `INSERT INTO users (email, name, password_hash, plan, home_city, currency)
-       VALUES (?, ?, ?, ?, ?, 'EUR')`,
-    );
-    const addUser = (email: string, name: string, plan: string, city: string) =>
-      Number(insertUser.run(email, name, password, plan, city).lastInsertRowid);
 
-    const camille = addUser(DEMO_EMAIL, "Camille Dupont", "plus", "Lyon");
-    const sam = addUser("sam@journeyvalley.app", "Sam Ortega", "free", "Lyon");
-    const noor = addUser("noor@journeyvalley.app", "Noor Haddad", "free", "Marseille");
+    const agencyId = Number(
+      db
+        .prepare(
+          `INSERT INTO agencies (name, legal_name, registration, email, phone, website,
+                                 target_margin_percent, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR')`,
+        )
+        .run(
+          "Escale Voyages",
+          "Escale Voyages SARL",
+          "IM069250014",
+          "bonjour@escale-voyages.fr",
+          "04 72 00 00 00",
+          "escale-voyages.fr",
+          15,
+        ).lastInsertRowid,
+    );
+
+    const insertUser = db.prepare(
+      `INSERT INTO users (email, name, password_hash, plan, home_city, currency, role, agency_id)
+       VALUES (?, ?, ?, ?, ?, 'EUR', ?, ?)`,
+    );
+    const addUser = (email: string, name: string, plan: string, city: string, role: string) =>
+      Number(insertUser.run(email, name, password, plan, city, role, agencyId).lastInsertRowid);
+
+    const camille = addUser(DEMO_EMAIL, "Camille Dupont", "plus", "Lyon", "advisor");
+    const sam = addUser("sam@journeyvalley.app", "Sam Ortega", "free", "Lyon", "client");
+    const noor = addUser("noor@journeyvalley.app", "Noor Haddad", "free", "Marseille", "client");
     const people = { camille, sam, noor };
 
+    // Les fiches clients de l'agence, rattachées à leur compte : le conseiller
+    // les retrouve dans son fichier, eux voient leurs dossiers dans leur espace.
+    const insertClient = db.prepare(
+      `INSERT INTO clients (agency_id, name, email, phone, notes, user_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    const clients = {
+      sam: Number(
+        insertClient.run(
+          agencyId,
+          "Sam Ortega",
+          "sam@journeyvalley.app",
+          "06 11 22 33 44",
+          "Voyage souvent en couple. Préfère les vols directs, déteste les escales de nuit.",
+          sam,
+        ).lastInsertRowid,
+      ),
+      noor: Number(
+        insertClient.run(
+          agencyId,
+          "Noor Haddad",
+          "noor@journeyvalley.app",
+          "06 55 66 77 88",
+          "Groupe d'amis, budget serré. Anniversaire en mars — relancer en janvier.",
+          noor,
+        ).lastInsertRowid,
+      ),
+    };
+
     const insertTrip = db.prepare(
-      `INSERT INTO trips (owner_id, title, summary, destination_city, destination_country,
-                          start_date, end_date, stage, currency, budget_cents,
-                          agency_quote_cents, travellers)
-       VALUES (@owner, @title, @summary, @city, @country, @start, @end, @stage, 'EUR',
+      `INSERT INTO trips (owner_id, client_id, title, summary, destination_city,
+                          destination_country, start_date, end_date, stage, currency,
+                          budget_cents, agency_quote_cents, travellers)
+       VALUES (@owner, @client, @title, @summary, @city, @country, @start, @end, @stage, 'EUR',
                @budget, @quote, @travellers)`,
     );
     const insertMember = db.prepare(
@@ -57,10 +109,13 @@ export function seedIfEmpty(db: Database.Database): void {
     );
 
     for (const spec of demoTrips(day)) {
-      const ownerId = people[spec.owner];
+      // Tous les dossiers appartiennent à la conseillère ; le client est celui
+      // pour qui le voyage est monté.
+      const ownerId = camille;
       const tripId = Number(
         insertTrip.run({
           owner: ownerId,
+          client: spec.owner === "camille" ? clients.sam : clients[spec.owner],
           title: spec.title,
           summary: spec.summary,
           city: spec.city,
@@ -74,9 +129,18 @@ export function seedIfEmpty(db: Database.Database): void {
         }).lastInsertRowid,
       );
 
+      // La conseillère tient le dossier ; les voyageurs y sont membres. Une
+      // personne n'apparaît qu'une fois : elle est déjà là comme propriétaire,
+      // ou déjà citée comme compagnon.
+      const seen = new Set<number>([ownerId]);
       insertMember.run(tripId, ownerId, "owner");
-      for (const companion of spec.companions ?? []) {
-        insertMember.run(tripId, people[companion], "companion");
+
+      const traveller = spec.owner === "camille" ? "sam" : spec.owner;
+      for (const person of [traveller, ...(spec.companions ?? [])]) {
+        const userId = people[person];
+        if (seen.has(userId)) continue;
+        seen.add(userId);
+        insertMember.run(tripId, userId, "companion");
       }
 
       for (const booking of spec.bookings ?? []) {
@@ -194,7 +258,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           start_at: d(-96),
           end_at: d(-92),
           amount_cents: 24_600,
-          agency_quote_cents: 38_000,
+          agency_quote_cents: 26_700,
         },
         {
           type: "stay",
@@ -203,7 +267,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           start_at: d(-96),
           end_at: d(-92),
           amount_cents: 32_800,
-          agency_quote_cents: 52_000,
+          agency_quote_cents: 39_500,
           nights: 4,
         },
         {
@@ -211,7 +275,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           vendor: "Visite gourmande du Time Out Market",
           start_at: d(-94),
           amount_cents: 9_000,
-          agency_quote_cents: 13_000,
+          agency_quote_cents: 10_800,
         },
       ],
       expenses: [
@@ -240,7 +304,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
       stage: "booked",
       budget: 210_000,
       // The package holiday the same itinerary was quoted at.
-      agencyQuote: 289_000,
+      agencyQuote: 231_000,
       bookings: [
         {
           type: "flight",
@@ -295,7 +359,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
       end: d(126),
       stage: "planning",
       budget: 340_000,
-      agencyQuote: 452_000,
+      agencyQuote: 398_000,
       bookings: [
         {
           type: "flight",
@@ -304,7 +368,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           start_at: d(112),
           end_at: d(126),
           amount_cents: 148_000,
-          agency_quote_cents: 186_000,
+          agency_quote_cents: 160_900,
         },
       ],
     },
@@ -330,7 +394,7 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
       end: d(-313),
       stage: "completed",
       budget: 95_000,
-      agencyQuote: 148_000,
+      agencyQuote: 89_000,
       bookings: [
         {
           type: "transport",

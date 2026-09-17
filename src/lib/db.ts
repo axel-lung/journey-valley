@@ -53,6 +53,31 @@ export function migrate(db: Database.Database): void {
       created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS agencies (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      name                  TEXT NOT NULL,
+      legal_name            TEXT NOT NULL DEFAULT '',
+      registration          TEXT NOT NULL DEFAULT '',
+      email                 TEXT NOT NULL DEFAULT '',
+      phone                 TEXT NOT NULL DEFAULT '',
+      website               TEXT NOT NULL DEFAULT '',
+      brand_colour          TEXT NOT NULL DEFAULT '#1d4ed8',
+      target_margin_percent INTEGER NOT NULL DEFAULT 15,
+      currency              TEXT NOT NULL DEFAULT 'EUR',
+      created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS clients (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      agency_id  INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      email      TEXT NOT NULL DEFAULT '',
+      phone      TEXT NOT NULL DEFAULT '',
+      notes      TEXT NOT NULL DEFAULT '',
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id         TEXT PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -166,6 +191,7 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE INDEX IF NOT EXISTS idx_clients_agency ON clients(agency_id, name);
     CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner_id, stage);
     CREATE INDEX IF NOT EXISTS idx_members_user ON trip_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_trip ON bookings(trip_id);
@@ -180,6 +206,13 @@ export function migrate(db: Database.Database): void {
   // Columns added after the first release. `CREATE TABLE IF NOT EXISTS` leaves
   // an existing table alone, so new columns need adding by hand.
   addColumn(db, "expenses", "participant_ids", "TEXT");
+
+  // The pivot to travel agencies. Existing rows keep working: an account with
+  // no agency is an advisor without an agency yet, and a file with no client is
+  // one nobody has been attached to.
+  addColumn(db, "users", "role", "TEXT NOT NULL DEFAULT 'advisor'");
+  addColumn(db, "users", "agency_id", "INTEGER REFERENCES agencies(id) ON DELETE SET NULL");
+  addColumn(db, "trips", "client_id", "INTEGER REFERENCES clients(id) ON DELETE SET NULL");
 }
 
 /** Adds a column only when the table does not already have it. */

@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { getDb } from "./db";
 import { hashPassword, verifyPassword } from "./password";
 import { isCurrency, type Currency } from "./money";
-import type { User } from "./types";
+import { createAgency } from "./agency";
+import type { User, UserRole } from "./types";
 
 const SESSION_COOKIE = "jv_session";
 const SESSION_TTL_DAYS = 30;
@@ -36,12 +37,21 @@ export class EmailTakenError extends Error {
   }
 }
 
+/**
+ * Crée un compte.
+ *
+ * Sans nom d'agence, c'est un compte client : le voyageur que son conseiller
+ * invite, qui voit ses dossiers et rien d'autre. Avec un nom d'agence, c'est un
+ * conseiller, et l'agence naît avec lui — une inscription, pas deux.
+ */
 export function registerUser(input: {
   email: string;
   name: string;
   password: string;
   homeCity: string;
   currency: string;
+  agencyName?: string;
+  role?: UserRole;
 }): User {
   const db = getDb();
   const email = input.email.trim().toLowerCase();
@@ -52,16 +62,29 @@ export function registerUser(input: {
   if (existing) throw new EmailTakenError();
 
   const currency: Currency = isCurrency(input.currency) ? input.currency : "EUR";
+  const agencyName = input.agencyName?.trim() ?? "";
+  const role: UserRole = input.role ?? (agencyName ? "advisor" : "client");
+  const agency = role === "advisor" && agencyName ? createAgency({ name: agencyName, currency }) : null;
+
   const result = db
     .prepare(
-      `INSERT INTO users (email, name, password_hash, plan, home_city, currency)
-       VALUES (?, ?, ?, 'free', ?, ?)`,
+      `INSERT INTO users (email, name, password_hash, plan, home_city, currency, role, agency_id)
+       VALUES (?, ?, ?, 'free', ?, ?, ?, ?)`,
     )
-    .run(email, input.name.trim(), hashPassword(input.password), input.homeCity.trim(), currency);
+    .run(
+      email,
+      input.name.trim(),
+      hashPassword(input.password),
+      input.homeCity.trim(),
+      currency,
+      role,
+      agency?.id ?? null,
+    );
 
   return db
     .prepare<[number], User>(
-      `SELECT id, email, name, plan, home_city, currency, created_at FROM users WHERE id = ?`,
+      `SELECT id, email, name, plan, home_city, currency, role, agency_id, created_at
+         FROM users WHERE id = ?`,
     )
     .get(Number(result.lastInsertRowid))!;
 }
@@ -100,7 +123,8 @@ export async function getCurrentUser(): Promise<User | null> {
   const db = getDb();
   const row = db
     .prepare<[string], User & { expires_at: string }>(
-      `SELECT u.id, u.email, u.name, u.plan, u.home_city, u.currency, u.created_at, s.expires_at
+      `SELECT u.id, u.email, u.name, u.plan, u.home_city, u.currency, u.role, u.agency_id,
+              u.created_at, s.expires_at
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.id = ?`,
     )

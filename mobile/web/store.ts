@@ -250,6 +250,8 @@ export function createTrip(input: NewTripInput): Trip {
   const trip: Trip = {
     id: id(),
     owner_id: 1,
+    // Le téléphone n'a pas d'agence : un dossier y est toujours le sien.
+    client_id: null,
     title: input.title,
     summary: input.summary,
     destination_city: input.destination_city,

@@ -38,6 +38,8 @@ const signupSchema = z.object({
   password: z.string().min(8, "Au moins 8 caractères."),
   home_city: z.string().trim().max(80).default(""),
   currency: z.enum(["EUR", "USD", "GBP", "CHF"]).default("EUR"),
+  /** Renseigné = compte conseiller, et l'agence est créée avec lui. */
+  agency_name: z.string().trim().max(120).default(""),
 });
 
 export async function signupAction(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -54,6 +56,7 @@ export async function signupAction(_prev: AuthState, formData: FormData): Promis
       password: parsed.data.password,
       homeCity: parsed.data.home_city,
       currency: parsed.data.currency,
+      agencyName: parsed.data.agency_name,
     });
     userId = user.id;
   } catch (error) {

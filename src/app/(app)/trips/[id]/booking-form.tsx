@@ -53,12 +53,12 @@ export function BookingForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={`Vous avez payé (${currency})`} hint={error("amount")}>
+        <Field label={`Coût d'achat (${currency})`} hint={error("amount") ?? "Ce que vous payez au fournisseur."}>
           <input name="amount" required inputMode="decimal" placeholder="624" className={inputClass} />
         </Field>
         <Field
-          label={`Devis agence (${currency})`}
-          hint={error("agency_quote") ?? "Le prix de la même chose en agence, si vous l'avez regardé."}
+          label={`Prix de vente (${currency})`}
+          hint={error("agency_quote") ?? "Ce que le client paie pour cette ligne. Vide = pas encore fixé."}
         >
           <input name="agency_quote" inputMode="decimal" placeholder="790" className={inputClass} />
         </Field>

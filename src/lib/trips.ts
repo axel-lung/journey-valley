@@ -177,7 +177,7 @@ export function findUserByEmail(email: string): User | null {
   return (
     getDb()
       .prepare<[string], User>(
-        `SELECT id, email, name, plan, home_city, currency, created_at
+        `SELECT id, email, name, plan, home_city, currency, role, agency_id, created_at
            FROM users WHERE email = ? COLLATE NOCASE`,
       )
       .get(email.trim().toLowerCase()) ?? null

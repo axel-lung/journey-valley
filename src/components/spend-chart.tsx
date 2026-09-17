@@ -176,16 +176,21 @@ export function SavingsBars({
   agencyCents,
   yourCents,
   currency,
+  agencyLabel = "Devis agence",
+  yourLabel = "Vous avez payé",
 }: {
   agencyCents: number;
   yourCents: number;
   currency: Currency;
+  /** Les deux barres servent aussi à comparer vente et coût, côté agence. */
+  agencyLabel?: string;
+  yourLabel?: string;
 }) {
   const max = Math.max(1, agencyCents, yourCents);
 
   const rows = [
-    { label: "Devis agence", value: agencyCents, color: SERIES_SPENT },
-    { label: "Vous avez payé", value: yourCents, color: SERIES_BOOKED },
+    { label: agencyLabel, value: agencyCents, color: SERIES_SPENT },
+    { label: yourLabel, value: yourCents, color: SERIES_BOOKED },
   ];
 
   return (

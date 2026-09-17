@@ -89,6 +89,18 @@ function SignUpForm() {
         <input name="name" required autoComplete="name" placeholder="Camille Dupont" className={inputClass} />
       </Field>
 
+      <Field
+        label="Nom de votre agence"
+        hint="Laissez vide si vous êtes voyageur : votre conseiller vous ouvrira l'accès à vos dossiers."
+      >
+        <input
+          name="agency_name"
+          autoComplete="organization"
+          placeholder="Escale Voyages"
+          className={inputClass}
+        />
+      </Field>
+
       <Field label="E-mail">
         <input name="email" type="email" required autoComplete="username" className={inputClass} />
       </Field>
@@ -105,7 +117,7 @@ function SignUpForm() {
       </Field>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Ville de départ">
+        <Field label="Ville">
           <input name="home_city" placeholder="Lyon" className={inputClass} />
         </Field>
         <Field label="Devise">
@@ -122,8 +134,8 @@ function SignUpForm() {
         Créer mon compte gratuit
       </SubmitButton>
       <p className="text-xs leading-relaxed text-stone-500">
-        Forfait Découverte, sans carte bancaire. Deux voyages en cours et un compagnon — vous
-        passerez à Plus si vous partez plus souvent.
+        Sans carte bancaire. Vous créez vos clients, vos dossiers et vos devis dès la première
+        minute ; vos voyageurs, eux, ne voient jamais vos coûts d'achat.
       </p>
     </form>
   );

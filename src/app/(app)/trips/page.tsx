@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { TripCard } from "@/components/trip-card";
 import { Card, EmptyState, buttonClass, inputClass } from "@/components/ui";
+import { isAdvisor } from "@/lib/agency";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { listTrips } from "@/lib/trips";
 import type { TripStage } from "@/lib/types";
@@ -19,6 +21,7 @@ export default async function TripsPage({
   searchParams: Promise<{ filter?: string; q?: string }>;
 }) {
   const user = await requireUser();
+  if (!isAdvisor(user)) redirect("/mon-voyage");
   const params = await searchParams;
 
   const filter = FILTERS.find((entry) => entry.key === params.filter) ?? FILTERS[0];

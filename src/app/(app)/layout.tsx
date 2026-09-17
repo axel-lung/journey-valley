@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Nav, type NavItem } from "@/components/nav";
+import { getAgency, isAdvisor } from "@/lib/agency";
 import { getCurrentUser } from "@/lib/auth";
 import { initials } from "@/lib/format";
 import { PLANS } from "@/lib/plans";
@@ -10,13 +11,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const items: NavItem[] = [
-    { href: "/dashboard", label: "Accueil", icon: "◎" },
-    { href: "/trips", label: "Mes voyages", icon: "✈" },
-    { href: "/spending", label: "Dépenses", icon: "€" },
-    { href: "/savings", label: "Économies", icon: "↓" },
-    { href: "/account", label: "Mon compte", icon: "☺" },
-  ];
+  // Deux produits dans un seul : le conseiller pilote son agence, le voyageur
+  // ne voit que ses voyages. Rien de ce qui suit n'est une autorisation — elle
+  // est vérifiée page par page — seulement ce qu'on propose d'ouvrir.
+  const advisor = isAdvisor(user);
+  const agency = getAgency(user.agency_id);
+
+  const items: NavItem[] = advisor
+    ? [
+        { href: "/dashboard", label: "Tableau de bord", icon: "◎" },
+        { href: "/clients", label: "Clients", icon: "☺" },
+        { href: "/trips", label: "Dossiers", icon: "✈" },
+        { href: "/marges", label: "Marges", icon: "€" },
+        { href: "/account", label: "Mon agence", icon: "⌂" },
+      ]
+    : [
+        { href: "/mon-voyage", label: "Mes voyages", icon: "✈" },
+        { href: "/spending", label: "Mes dépenses", icon: "€" },
+        { href: "/account", label: "Mon compte", icon: "☺" },
+      ];
 
   const plan = PLANS[user.plan];
 
@@ -28,7 +41,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 text-lg text-white">
               ◇
             </span>
-            <span className="text-sm font-semibold text-stone-900">Journey Valley</span>
+            <span className="text-sm font-semibold text-stone-900">
+              {agency?.name ?? "Journey Valley"}
+            </span>
           </Link>
         </div>
 
@@ -36,7 +51,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="mt-auto hidden border-t border-stone-100 px-5 py-4 lg:block">
           <p className="truncate text-sm font-medium text-stone-900">{user.name}</p>
-          <p className="truncate text-xs text-stone-500">Forfait {plan.name}</p>
+          <p className="truncate text-xs text-stone-500">
+            {advisor ? `Conseiller · forfait ${plan.name}` : "Espace voyageur"}
+          </p>
           <form action={logoutAction} className="mt-3">
             <button
               type="submit"
@@ -51,10 +68,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex-1">
         <header className="flex items-center justify-between gap-4 border-b border-stone-200 bg-white px-5 py-3 lg:px-8">
           <p className="hidden text-sm text-stone-500 lg:block">
-            {user.home_city ? `Au départ de ${user.home_city}` : "Vos voyages"}
+            {advisor
+              ? (agency?.name ?? "Votre agence")
+              : user.home_city
+                ? `Au départ de ${user.home_city}`
+                : "Vos voyages"}
           </p>
           <div className="flex items-center gap-3 lg:ml-auto">
-            {user.plan === "free" && (
+            {advisor && user.plan === "free" && (
               <Link
                 href="/account"
                 className="rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 ring-inset hover:bg-brand-100"

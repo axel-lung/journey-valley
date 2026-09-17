@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { SubmitButton } from "@/components/submit-button";
-import { SavingsBars } from "@/components/spend-chart";
 import { coverStyle } from "@/lib/cover";
 import {
   Badge,
@@ -15,14 +14,10 @@ import {
   buttonClass,
   secondaryButtonClass,
 } from "@/components/ui";
+import { getAgency, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
-import {
-  budgetStatus,
-  savingsSummary,
-  settlementPlan,
-  splitBalances,
-  tripNights,
-} from "@/lib/budget";
+import { budgetStatus, settlementPlan, splitBalances, tripNights } from "@/lib/budget";
+import { dossierMargin } from "@/lib/margin";
 import { countdown, formatDate, formatDateRange, formatNights, initials } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { estimatePackagePrice } from "@/lib/package";
@@ -50,6 +45,7 @@ import {
 } from "../actions";
 import { BookingForm } from "./booking-form";
 import { DossierCard, DossierSkeleton } from "./dossier-card";
+import { MarginCard } from "./margin-card";
 import { ItineraryCard } from "./itinerary-card";
 import { Checklist } from "./checklist";
 import { CompanionForm } from "./companion-form";
@@ -94,6 +90,11 @@ export default async function TripPage({
   const { id } = await params;
   const { error } = await searchParams;
 
+  // Le dossier est l'atelier du conseiller : il montre les coûts fournisseurs.
+  // Un client n'a rien à faire ici — son voyage se lit dans son espace, qui ne
+  // contient aucun montant d'achat.
+  if (!isAdvisor(user)) redirect(`/mon-voyage/${id}`);
+
   const trip = getTripSummary(user.id, Number(id));
   if (!trip) notFound();
 
@@ -105,7 +106,8 @@ export default async function TripPage({
   const watches = listWatches(trip.id);
 
   const budget = budgetStatus(trip, bookings, expenses);
-  const savings = savingsSummary(trip, bookings);
+  const margin = dossierMargin(trip, bookings);
+  const agency = getAgency(user.agency_id);
   const balances = splitBalances(members, expenses);
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, trip.my_role);
@@ -239,21 +241,23 @@ export default async function TripPage({
           hint={`À ${members.length}`}
         />
         <StatTile
-          label="Économisé vs agence"
-          value={savings.basis === "none" ? "—" : formatMoney(savings.saved_cents, currency)}
+          label="Marge"
+          value={margin.basis === "none" ? "—" : formatMoney(margin.margin_cents, currency)}
           hint={
-            savings.basis === "none"
-              ? "Ajoutez un devis pour comparer"
-              : savings.provisional
-                ? "Estimation : réservations en cours"
-                : savings.basis === "trip_quote"
-                  ? "Face au devis du forfait"
-                  : `Sur ${savings.compared_lines} réservation${savings.compared_lines > 1 ? "s" : ""} comparée${savings.compared_lines > 1 ? "s" : ""}`
+            margin.basis === "none"
+              ? "Posez un prix de vente"
+              : margin.partial
+                ? `Plancher : ${margin.unpriced_lines} ligne${margin.unpriced_lines > 1 ? "s" : ""} sans prix`
+                : `${margin.margin_percent} % de marque${margin.basis === "package" ? " · forfait" : ""}`
           }
           tone={
-            savings.basis !== "none" && !savings.provisional && savings.saved_cents > 0
-              ? "positive"
-              : "default"
+            margin.basis === "none"
+              ? "default"
+              : margin.partial
+                ? "warning"
+                : margin.margin_cents > 0
+                  ? "positive"
+                  : "warning"
           }
         />
       </div>
@@ -278,73 +282,36 @@ export default async function TripPage({
         </Card>
       )}
 
-      {savings.basis !== "none" && (
-        <Card
-          title={
-            savings.basis === "trip_quote"
-              ? "Face au prix du forfait"
-              : "Face aux devis que vous avez notés"
-          }
-        >
-          <SavingsBars
-            agencyCents={savings.agency_cents}
-            yourCents={savings.your_cost_cents}
-            currency={currency}
-          />
-          <div className="space-y-3 border-t border-stone-100 px-5 py-3.5">
-            {savings.provisional ? (
-              <ProvisionalNote>
-                Ce voyage n'est pas entièrement réservé. Le devis couvre tout le séjour, vos
-                réservations pas encore : l'écart de{" "}
-                <strong>{formatMoney(savings.saved_cents, currency)}</strong> est donc flatteur et
-                n'entre pas dans le total de la page Économies. Il deviendra définitif au statut
-                « réservé ».
-              </ProvisionalNote>
-            ) : (
-              <p className="text-sm text-stone-600">
-                {savings.saved_cents >= 0 ? (
-                  <>
-                    Réserver vous-même vous garde{" "}
-                    <strong className="text-emerald-700">
-                      {formatMoney(savings.saved_cents, currency)}
-                    </strong>{" "}
-                    ({savings.saved_percent} %) que l'agence aurait pris.
-                  </>
-                ) : (
-                  <>
-                    C'est{" "}
-                    <strong className="text-rose-700">
-                      {formatMoney(-savings.saved_cents, currency)}
-                    </strong>{" "}
-                    de plus que le devis — regardez ce que le forfait incluait.
-                  </>
-                )}
-              </p>
-            )}
-          </div>
-        </Card>
-      )}
+      <MarginCard
+        margin={margin}
+        currency={currency}
+        targetMarginPercent={agency?.target_margin_percent ?? 15}
+      />
 
-      {savings.basis === "none" && packageEstimate.components > 0 && (
-        <Card title="Estimation : ce que ça coûterait en formule">
+      {margin.basis === "none" && packageEstimate.components > 0 && (
+        <Card title="Repère de prix : ce que ces prestations se vendent">
           <div className="space-y-2.5 px-5 py-4 text-sm text-stone-600">
             <p>
-              Vos {packageEstimate.components} réservation
-              {packageEstimate.components > 1 ? "s" : ""} totalisent{" "}
+              Ces {packageEstimate.components} ligne{packageEstimate.components > 1 ? "s" : ""} vous
+              coûtent{" "}
               <strong className="text-stone-900">
                 {formatMoney(packageEstimate.your_cost_cents, currency)}
               </strong>
-              . Vendues dans un forfait, elles tourneraient plutôt autour de{" "}
+              . Vendues en forfait, elles se situent d'ordinaire entre{" "}
               <strong className="text-stone-900">
-                {formatMoney(packageEstimate.low_cents, currency)} –{" "}
+                {formatMoney(packageEstimate.low_cents, currency)}
+              </strong>{" "}
+              et{" "}
+              <strong className="text-stone-900">
                 {formatMoney(packageEstimate.high_cents, currency)}
               </strong>
-              , soit environ {formatMoney(packageEstimate.mid_difference_cents, currency)} de plus.
+              .
             </p>
             <p className="text-xs leading-relaxed text-stone-500">
-              Calcul indicatif, à partir des marges habituelles du secteur (faibles sur les vols,
-              plus élevées sur l'hébergement et les excursions). Il ne compte pas dans vos
-              économies : pour ça, saisissez un vrai devis sur le voyage ou sur une réservation.
+              Repère indicatif, calculé sur les marges habituelles du secteur : faibles sur les
+              vols, plus élevées sur l'hébergement et les excursions. C'est une fourchette de
+              marché, pas votre prix — le vôtre se pose ligne par ligne, ou en forfait sur le
+              dossier.
             </p>
           </div>
         </Card>

@@ -1,50 +1,53 @@
 # Journey Valley
 
-A SaaS for people who plan their own holidays instead of buying a package — and want to see
-what that decision is worth.
+A SaaS for independent travel advisors: build the file, price it, see the margin, and hand the
+traveller an app that shows them everything except what you paid for it.
 
-You keep a trip's flights, stays, car hire and activities in one place, log what everyone spends
-while you are there, and record what a travel agency quoted for the same thing. Journey Valley
-does the arithmetic: how much of the budget is left, what each traveller owes, and how much of
-the agency's margin stayed in your pocket.
+Two views of the same file. The advisor sees supplier costs, sell prices, margin in euros and in
+both rates. The traveller sees their programme, their documents, their price. Neither view is a
+filtered version of the other: they are separate routes, so a forgotten `if` cannot leak a cost.
 
 The interface is in French; the code, comments and tests are in English.
 
 ## What it does
 
-- **Trips through their real stages** — idea → planning → booked → on the road → completed. The
-  stage machine decides what each person may do; a companion can mark things booked, only the
-  organiser can cancel.
-- **Savings against an agency quote.** Record a package quote for the whole trip, or a comparable
-  price on individual bookings. The comparison never inflates the figure: with per-booking quotes
-  only the quoted lines are compared, on both sides, and a package quote on a trip that is still
-  being booked is marked provisional and kept out of the totals.
-- **A checklist per trip** — passport, insurance, adaptor — with a one-tap template of the things
-  almost every trip needs.
-- **Expenses split between the people they concern**, not always the whole group: the taxi three
-  of you took is split three ways, and everyone else stays out of it.
-- **A settle-up you can paste into the group chat**, as text, in one tap.
-- **Search for flights, stays and activities from inside a trip**, and add a result as a booking in
-  one tap. See *Search providers* below for what is and is not connected.
+### For the agency
+
+- **Margin on every line and every file.** Each booking carries what you paid and what it sells
+  for. The file shows the margin, the **taux de marque** (margin ÷ sell) and the **taux de marge**
+  (margin ÷ cost) side by side, because confusing the two is how a quote loses money.
+- **A pricing assistant that divides instead of multiplying.** At a 15 % target, a €1 000 purchase
+  sells at €1 176 — not €1 150. The suggestion is computed, rounded to the euro, and compared with
+  what you have actually posted.
+- **A margin that admits when it is not final.** Two opposite dangers, both named on screen: a line
+  with no sell price makes the figure a *floor*; a package sold against purchases you have not
+  finished making makes it a *ceiling*. Only booked files count towards the agency's revenue.
+- **A client file** — contacts, notes, every dossier, what each client has been worth.
+- **A dashboard for the morning**: what leaves next, what is still a quote, which margins are not
+  yet firm.
+- **Margins by month of departure**, and file by file, against the target you set.
+- **Trips through their real stages** — idea → planning → booked → on the road → completed —
+  which double as the pipeline.
+
+### For the traveller
+
+- **Their own space**, on the agency's name, with the programme day by day, what is booked with
+  its references, the checklist and the price they pay. No cost, no margin, ever.
+- **A destination file**: weather for those dates, what a euro is worth there, what there is to
+  see, and the practical page — plugs, emergency number, which side of the road, entry rules.
+- **A printable travel book**, which the advisor reads with costs and the traveller reads with
+  prices — one document, two truths, neither of them false.
+- **An Android app** that carries the lot offline. See [`mobile/README.md`](mobile/README.md).
+
+### Shared by both
+
+- **Search for flights, stays and activities from inside a file**, and add a result in one tap.
+  See *Search providers* below for what is and is not connected.
 - **Price alerts.** Watch a route or a stay, set the price you want to be told about, and let the
   scheduled sweep re-check it.
-- **A destination file**: what the weather does then, what a euro is worth there, what there is to
-  see, and the practical page — plugs, emergency number, which side of the road, entry rules.
-- **A day-by-day programme**, built from the bookings and expenses already on the trip.
-- **A printable travel book** — the file an agency hands over: programme, every booking with its
-  reference, the emergency page, the checklist and who owes what.
-- **An estimate of what the same trip would cost as a package**, from the usual industry margins —
-  shown as an order of magnitude, deliberately kept out of the savings totals.
-- **A budget you can actually read** — committed vs. remaining, per traveller, with the overrun
-  called out rather than hidden.
-- **Shared costs, settled fairly.** Expenses are split evenly or kept personal; rounding cents are
-  rotated between travellers so shares are whole cents and still add up exactly. The settle-up view
-  turns balances into the fewest payments that square everyone off.
+- **Expenses split between the people they concern**, for the group files where travellers share
+  costs: rounding cents rotate between them so shares are whole cents and still add up exactly.
 - **Countdowns and dates in French** — `J − 12`, `12 – 21 oct. 2026` — from one tested module.
-- **Companions.** Invite people by the email they signed up with; they see the trip, add their own
-  bookings and expenses, and are counted in every split.
-- **Free and Plus plans.** Free keeps two trips active with one companion each; Plus lifts both
-  limits. The limits are enforced server-side, not just hidden in the UI.
 
 ## Running it
 
@@ -58,10 +61,11 @@ Sign in with the seeded demo account:
 
 | Account | Password |
 | --- | --- |
-| `camille@journeyvalley.app` (Plus, 5 trips) | `journey2026` |
-| `sam@journeyvalley.app` (Free, sees two trips as a companion) | `journey2026` |
+| `camille@journeyvalley.app` — advisor at Escale Voyages | `journey2026` |
+| `sam@journeyvalley.app` — her client, travellers' view | `journey2026` |
 
-Or create a new account from the same screen — signup is a real flow, not a mock.
+Sign in as both, one after the other: that contrast is the product. Or create an account from the
+same screen — giving an agency name makes you an advisor, leaving it blank makes you a traveller.
 
 ### Configuration
 
@@ -140,10 +144,11 @@ and does not do.
 ## Checks
 
 ```bash
-npm test         # unit tests for the money, budget, savings, split and stage logic
+npm test         # unit tests for the money, margin, budget, split and stage logic
 npm run typecheck
 npm run build
-npm run smoke    # end-to-end: signup → trip → booking → expense → plan limit → settle up
+npm run smoke    # end-to-end: open an agency → file a client → price a dossier → read the margin
+                 #              → check the traveller is never shown a cost
 npm run apk:test # the Android bundle, driven in a phone-sized browser
 ```
 
@@ -159,7 +164,8 @@ the machine when one is available (`CHROMIUM_PATH` overrides it).
   `src/lib/seed.ts`. Every query is a prepared statement.
 - **Money is integer cents everywhere.** `src/lib/money.ts` parses what people actually type
   (`1 234,56`, `€1,500`, `89`) and formats it back; nothing in the app multiplies a float by 100.
-- **The interesting logic is pure and tested.** `budget.ts` (budgets, agency savings, cost
+- **The interesting logic is pure and tested.** `margin.ts` (margin, both rates, sell-price
+  assistant), `budget.ts` (budgets, cost
   splitting, settlement), `stages.ts` (who may move a trip where) and `format.ts` (French dates and
   countdowns) have no database or React dependency, so `npm test` covers them directly.
 - **Authorisation is by membership.** Trip queries join `trip_members`, so a trip you are not on
@@ -170,10 +176,12 @@ src/
   app/
     login/            sign in and sign up
     (app)/            everything behind a session
-      dashboard/      overview, spending chart, activity
-      trips/          list, create, and the trip page (bookings, expenses, companions, settle up)
-      spending/       every expense across your trips
-      savings/        agency comparison, trip by trip
+      dashboard/      the advisor's morning: pipeline, departures, margins to confirm
+      trips/          the dossiers: list, create, and the file itself (lines, margin, search)
+      spending/       expenses across the files
+      clients/        the agency's client file
+      marges/         margin by month and by dossier
+      mon-voyage/     the traveller's own space — no cost is ever read here
       account/        plan and profile
     api/watches/      the scheduled price-watch sweep
   components/         shared UI, nav, charts
@@ -186,6 +194,15 @@ scripts/smoke.mjs     end-to-end browser test
 
 ## Known gaps
 
+- **No quote to send yet.** The advisor prices the file and the client sees the price in their
+  space; there is no PDF proposal with an accept button, and no deposit tracking. That is the next
+  piece of work, and the one a paying agency will ask for first.
+- **A client account is created by signing up, then added to the file by e-mail.** There is no
+  invitation flow, so onboarding a traveller takes two steps and a phone call.
+- **One agency, one advisor.** The schema carries `agency_id` on the user, but there is no way to
+  invite a colleague, and no per-advisor margin split.
+- **Plans are still the consumer Free/Plus.** Agency pricing (per agency, not per seat) is decided
+  but not implemented, and nothing charges a card.
 - No free key-less API exists for flight or hotel prices; those need Amadeus (free tier, keyed).
   OpenStreetMap gives real activities but no prices, so importing one asks for the price rather
   than recording a booking at zero.

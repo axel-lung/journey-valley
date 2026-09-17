@@ -13,6 +13,13 @@ export type TripStage =
 
 export type MemberRole = "owner" | "companion";
 
+/**
+ * Who is looking. An advisor works for an agency and sees everything — what a
+ * booking cost, what it sells for, the margin. A client is a traveller with an
+ * account: they see their trip, never a cost and never a margin.
+ */
+export type UserRole = "advisor" | "client";
+
 export type BookingType = "flight" | "stay" | "activity" | "transport" | "other";
 
 export type ExpenseCategory =
@@ -30,12 +37,55 @@ export interface User {
   plan: Plan;
   home_city: string;
   currency: Currency;
+  role: UserRole;
+  /** The agency an advisor works for; null for a client's own account. */
+  agency_id: number | null;
   created_at: string;
+}
+
+export interface Agency {
+  id: number;
+  name: string;
+  legal_name: string;
+  /** Immatriculation Atout France (IM0…), printed on every quote. */
+  registration: string;
+  email: string;
+  phone: string;
+  website: string;
+  /** Used for the quote, the travel book and the traveller's app. */
+  brand_colour: string;
+  /** Taux de marque visé, in percent; what the sell-price assistant aims for. */
+  target_margin_percent: number;
+  currency: Currency;
+  created_at: string;
+}
+
+/** Someone the agency sells to. They may or may not have a login. */
+export interface Client {
+  id: number;
+  agency_id: number;
+  name: string;
+  email: string;
+  phone: string;
+  notes: string;
+  /** Their account, once invited; null while the file is advisor-only. */
+  user_id: number | null;
+  created_at: string;
+}
+
+export interface ClientSummary extends Client {
+  trips: number;
+  /** Sold, across confirmed files. */
+  sold_cents: number;
+  margin_cents: number;
+  last_departure: string | null;
 }
 
 export interface Trip {
   id: number;
   owner_id: number;
+  /** The client this file is for; null on a file not yet attached to anyone. */
+  client_id: number | null;
   title: string;
   summary: string;
   destination_city: string;
@@ -45,7 +95,14 @@ export interface Trip {
   stage: TripStage;
   currency: Currency;
   budget_cents: number;
-  /** What a travel agency or packaged tour quoted for the same trip, if known. */
+  /**
+   * The price the file is sold at, as a package.
+   *
+   * The column is older than the pivot to agencies, where it held what a rival
+   * agency quoted; it now holds what *this* agency charges, which is the same
+   * number read from the other side of the desk. `margin.ts` speaks the
+   * agency's vocabulary over it — see `dossierMargin`.
+   */
   agency_quote_cents: number;
   travellers: number;
   created_at: string;
@@ -70,7 +127,7 @@ export interface Booking {
   start_at: string;
   end_at: string | null;
   amount_cents: number;
-  /** Comparable agency/package price for this line, 0 when not compared. */
+  /** What this line sells for; 0 when no sell price has been set. */
   agency_quote_cents: number;
   nights: number | null;
   booked_by: number | null;
