@@ -126,8 +126,8 @@ export async function importResultAction(formData: FormData): Promise<void> {
   getDb()
     .prepare(
       `INSERT INTO bookings (trip_id, type, vendor, reference, description, start_at, end_at,
-                             amount_cents, agency_quote_cents, nights, booked_by)
-       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 0, ?, ?)`,
+                             amount_cents, agency_quote_cents, zone, nights, booked_by)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 0, 'eu', ?, ?)`,
     )
     .run(
       trip.id,

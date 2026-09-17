@@ -213,6 +213,13 @@ export function migrate(db: Database.Database): void {
   addColumn(db, "users", "role", "TEXT NOT NULL DEFAULT 'advisor'");
   addColumn(db, "users", "agency_id", "INTEGER REFERENCES agencies(id) ON DELETE SET NULL");
   addColumn(db, "trips", "client_id", "INTEGER REFERENCES clients(id) ON DELETE SET NULL");
+
+  // TVA sur marge : la zone d'exécution se porte sur la ligne d'achat, parce
+  // que c'est elle qui sert de clé de ventilation et qu'il faut pouvoir la
+  // justifier ligne par ligne.
+  addColumn(db, "bookings", "zone", "TEXT NOT NULL DEFAULT 'eu'");
+  addColumn(db, "agencies", "vat_rate", "INTEGER NOT NULL DEFAULT 20");
+  addColumn(db, "agencies", "vat_on_margin", "INTEGER NOT NULL DEFAULT 1");
 }
 
 /** Adds a column only when the table does not already have it. */

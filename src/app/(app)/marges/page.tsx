@@ -44,11 +44,11 @@ export default async function MarginsPage() {
       </header>
 
       <HeroStat
-        label="Marge totale"
-        value={formatMoney(totals.margin_cents, currency)}
+        label="Marge nette, après TVA sur marge"
+        value={formatMoney(totals.margin_net_cents, currency)}
         hint={
           totals.files > 0
-            ? `${formatMoney(totals.sell_cents, currency)} vendus pour ${formatMoney(totals.cost_cents, currency)} d'achats, sur ${totals.files} dossier${totals.files > 1 ? "s" : ""}.`
+            ? `${formatMoney(totals.sell_cents, currency)} vendus, ${formatMoney(totals.cost_cents, currency)} d'achats, ${formatMoney(totals.margin_cents, currency)} de marge brute dont ${formatMoney(totals.vat_cents, currency)} de TVA.`
             : "Aucun dossier réservé pour l'instant."
         }
       />
@@ -56,12 +56,9 @@ export default async function MarginsPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatTile label="Taux de marque" value={`${totals.margin_percent} %`} hint={`Objectif ${target} %`} />
         <StatTile
-          label="Marge moyenne par dossier"
-          value={
-            totals.files > 0
-              ? formatMoney(Math.round(totals.margin_cents / totals.files), currency)
-              : "—"
-          }
+          label="TVA sur marge"
+          value={formatMoney(totals.vat_cents, currency)}
+          hint="Déduite du net ci-dessus"
         />
         <StatTile
           label="Sous l'objectif"
@@ -123,11 +120,12 @@ export default async function MarginsPage() {
                 <th className="px-5 py-3">Étape</th>
                 <th className="px-5 py-3 text-right">Vendu</th>
                 <th className="px-5 py-3 text-right">Marge</th>
-                <th className="px-5 py-3 text-right">Marque</th>
+                <th className="px-5 py-3 text-right">TVA</th>
+                <th className="px-5 py-3 text-right">Net</th>
               </tr>
             }
           >
-            {counted.map(({ trip, margin }) => (
+            {counted.map(({ trip, margin, vat }) => (
               <tr key={trip.id} className="hover:bg-stone-50">
                 <td className="px-5 py-3">
                   <Link
@@ -144,20 +142,24 @@ export default async function MarginsPage() {
                 <td className="px-5 py-3 text-right tabular-nums text-stone-800">
                   {formatMoney(margin.sell_cents, currency)}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums">
+                <td className="px-5 py-3 text-right tabular-nums text-stone-600">
                   {formatMoney(margin.margin_cents, currency)}
                   {margin.partial && (
-                    <span className="ml-1 text-amber-600" title="Lignes sans prix de vente">
+                    <span className="ml-1 text-amber-600" title="Marge pas encore ferme">
                       ≈
                     </span>
                   )}
                 </td>
+                <td className="px-5 py-3 text-right tabular-nums text-stone-500">
+                  {vat.vat_cents > 0 ? `− ${formatMoney(vat.vat_cents, currency)}` : "exonérée"}
+                </td>
                 <td
-                  className={`px-5 py-3 text-right tabular-nums ${
-                    margin.margin_percent < target ? "text-amber-700" : "text-stone-600"
+                  className={`px-5 py-3 text-right tabular-nums font-medium ${
+                    margin.margin_percent < target ? "text-amber-700" : "text-emerald-700"
                   }`}
+                  title={`${margin.margin_percent} % de marque`}
                 >
-                  {margin.margin_percent} %
+                  {formatMoney(vat.margin_net_cents, currency)}
                 </td>
               </tr>
             ))}

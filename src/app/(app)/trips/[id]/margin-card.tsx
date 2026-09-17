@@ -2,6 +2,7 @@ import { Card, ProvisionalNote } from "@/components/ui";
 import { SavingsBars } from "@/components/spend-chart";
 import { roundToEuro, sellPriceFor, type DossierMargin } from "@/lib/margin";
 import { formatMoney, type Currency } from "@/lib/money";
+import { describeVat, type VatBreakdown } from "@/lib/vat";
 
 /**
  * La marge du dossier, du point de vue du conseiller.
@@ -13,10 +14,12 @@ import { formatMoney, type Currency } from "@/lib/money";
  */
 export function MarginCard({
   margin,
+  vat,
   currency,
   targetMarginPercent,
 }: {
   margin: DossierMargin;
+  vat: VatBreakdown;
   currency: Currency;
   targetMarginPercent: number;
 }) {
@@ -41,9 +44,49 @@ export function MarginCard({
 
       <div className="space-y-4 px-5 pb-4">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Figure label="Marge" value={formatMoney(margin.margin_cents, currency)} strong />
+          <Figure
+            label="Marge nette"
+            value={formatMoney(vat.margin_net_cents, currency)}
+            hint="après TVA sur marge"
+            strong
+          />
           <Figure label="Taux de marque" value={`${margin.margin_percent} %`} hint="marge / vente" />
           <Figure label="Taux de marge" value={`${margin.markup_percent} %`} hint="marge / achat" />
+        </div>
+
+        {/* La TVA sur marge est le calcul que les tableurs ratent : marge TTC,
+            taxe extraite, part hors UE exonérée. On montre le détail plutôt
+            qu'un total à croire sur parole. */}
+        <div className="rounded-xl bg-stone-50 px-4 py-3 text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-stone-600">Marge brute</span>
+            <span className="tabular-nums text-stone-800">
+              {formatMoney(margin.margin_cents, currency)}
+            </span>
+          </div>
+          {vat.exempt_margin_cents > 0 && (
+            <div className="mt-1 flex items-baseline justify-between gap-3">
+              <span className="text-stone-600">dont hors UE, exonérée</span>
+              <span className="tabular-nums text-stone-500">
+                {formatMoney(vat.exempt_margin_cents, currency)}
+              </span>
+            </div>
+          )}
+          <div className="mt-1 flex items-baseline justify-between gap-3">
+            <span className="text-stone-600">
+              TVA sur marge ({vat.rate_percent} %, extraite du TTC)
+            </span>
+            <span className="tabular-nums text-rose-700">
+              − {formatMoney(vat.vat_cents, currency)}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-baseline justify-between gap-3 border-t border-stone-200 pt-1.5">
+            <span className="font-medium text-stone-800">Vous gardez</span>
+            <span className="tabular-nums font-semibold text-emerald-700">
+              {formatMoney(vat.margin_net_cents, currency)}
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-stone-500">{describeVat(vat)}</p>
         </div>
 
         {margin.partial_reason === "unpriced_lines" && (

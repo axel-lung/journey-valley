@@ -18,6 +18,7 @@ import { getAgency, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { budgetStatus, settlementPlan, splitBalances, tripNights } from "@/lib/budget";
 import { dossierMargin } from "@/lib/margin";
+import { costsByZone, vatOnMargin } from "@/lib/vat";
 import { countdown, formatDate, formatDateRange, formatNights, initials } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { estimatePackagePrice } from "@/lib/package";
@@ -108,6 +109,12 @@ export default async function TripPage({
   const budget = budgetStatus(trip, bookings, expenses);
   const margin = dossierMargin(trip, bookings);
   const agency = getAgency(user.agency_id);
+  const vat = vatOnMargin({
+    marginGrossCents: margin.margin_cents,
+    costs: costsByZone(bookings),
+    ratePercent: agency?.vat_rate,
+    subjectToVat: agency ? agency.vat_on_margin === 1 : true,
+  });
   const balances = splitBalances(members, expenses);
   const transfers = settlementPlan(balances);
   const actions = availableStageActions(trip, trip.my_role);
@@ -241,8 +248,8 @@ export default async function TripPage({
           hint={`À ${members.length}`}
         />
         <StatTile
-          label="Marge"
-          value={margin.basis === "none" ? "—" : formatMoney(margin.margin_cents, currency)}
+          label="Marge nette"
+          value={margin.basis === "none" ? "—" : formatMoney(vat.margin_net_cents, currency)}
           hint={
             margin.basis === "none"
               ? "Posez un prix de vente"
@@ -284,6 +291,7 @@ export default async function TripPage({
 
       <MarginCard
         margin={margin}
+        vat={vat}
         currency={currency}
         targetMarginPercent={agency?.target_margin_percent ?? 15}
       />

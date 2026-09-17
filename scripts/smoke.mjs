@@ -125,7 +125,7 @@ try {
   await page.waitForURL("**/dashboard");
   check(
     "signing up opens an agency and lands on its dashboard",
-    await page.getByText("Marge sur les dossiers réservés").first().isVisible(),
+    await page.getByText("Marge nette sur les dossiers réservés").first().isVisible(),
   );
 
   // 1b. A client goes into the file before a dossier exists.
@@ -169,6 +169,17 @@ try {
     "the two rates are told apart",
     (await page.getByText("20 %").first().isVisible()) &&
       (await page.getByText("25 %").first().isVisible()),
+  );
+
+  // La TVA sur marge : 300 € de marge TTC en UE → 300 × 20/120 = 50 € de taxe,
+  // et 250 € qui restent réellement à l'agence.
+  check(
+    "VAT is extracted from the margin, not added to it",
+    await page.getByText(/−\s*50\s€/).first().isVisible(),
+  );
+  check(
+    "the file shows what the agency actually keeps",
+    await page.getByText(/250\s€/).first().isVisible(),
   );
 
   // 4. Stage changes follow the machine: idea → planning → booked.
@@ -298,8 +309,8 @@ try {
   await page.goto(`${BASE}/marges`);
   check("the margins page lists the dossier", await page.getByText("Smoke test — Oslo").first().isVisible());
   check(
-    "the margins page totals the agency",
-    await page.getByText("Marge totale").first().isVisible(),
+    "the margins page totals the agency net of VAT",
+    await page.getByText("Marge nette, après TVA sur marge").first().isVisible(),
   );
   // L'ancienne adresse grand public mène à la même vérité, côté agence.
   await page.goto(`${BASE}/savings`);

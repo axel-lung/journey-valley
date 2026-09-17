@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { dossierMargin, purchasesComplete, totalMargin, type Margin } from "./margin";
+import { costsByZone, vatOnMargin, type VatBreakdown, type VatZone } from "./vat";
 import type { Agency, Client, ClientSummary, Trip, User } from "./types";
 
 /**
@@ -149,6 +150,8 @@ export function listClients(agencyId: number, search = ""): ClientSummary[] {
 export interface ClientFile {
   trip: Trip;
   margin: Margin & { partial: boolean };
+  /** Ce qu'il reste après la TVA sur marge — le chiffre qui compte vraiment. */
+  vat: VatBreakdown;
   /**
    * Seul un dossier réservé compte au chiffre : avant, les achats ne sont pas
    * tous saisis et la marge n'est qu'une prévision. Un devis en cours reste du
@@ -169,7 +172,8 @@ export function listClientFiles(agencyId: number, clientId: number): ClientFile[
     )
     .all(agencyId, clientId);
 
-  return trips.map((trip) => toFile(db, trip));
+  const agency = getAgency(agencyId);
+  return trips.map((trip) => toFile(db, trip, agency));
 }
 
 /** Tous les dossiers de l'agence, pour le tableau de bord. */
@@ -184,27 +188,56 @@ export function listAgencyFiles(agencyId: number): ClientFile[] {
     )
     .all(agencyId);
 
-  return trips.map((trip) => toFile(db, trip));
+  const agency = getAgency(agencyId);
+  return trips.map((trip) => toFile(db, trip, agency));
 }
 
-function toFile(db: ReturnType<typeof getDb>, trip: Trip): ClientFile {
+function toFile(db: ReturnType<typeof getDb>, trip: Trip, agency: Agency | null): ClientFile {
   const bookings = db
-    .prepare<[number], { amount_cents: number; agency_quote_cents: number }>(
-      `SELECT amount_cents, agency_quote_cents FROM bookings WHERE trip_id = ?`,
+    .prepare<[number], { amount_cents: number; agency_quote_cents: number; zone: VatZone }>(
+      `SELECT amount_cents, agency_quote_cents, zone FROM bookings WHERE trip_id = ?`,
     )
     .all(trip.id);
 
+  const margin = dossierMargin(trip, bookings);
   return {
     trip,
-    margin: dossierMargin(trip, bookings),
+    margin,
+    vat: vatOnMargin({
+      marginGrossCents: margin.margin_cents,
+      costs: costsByZone(bookings),
+      ratePercent: agency?.vat_rate,
+      subjectToVat: agency ? agency.vat_on_margin === 1 : true,
+    }),
     counts_towards_revenue: purchasesComplete(trip.stage),
   };
 }
 
-/** Le chiffre et la marge de l'agence sur les dossiers qui comptent. */
-export function agencyTotals(files: ClientFile[]): Margin & { files: number } {
+export interface AgencyTotals extends Margin {
+  files: number;
+  vat_cents: number;
+  /** Marge nette de TVA : ce que l'agence garde. */
+  margin_net_cents: number;
+}
+
+/**
+ * Le chiffre de l'agence sur les dossiers qui comptent.
+ *
+ * La TVA est additionnée dossier par dossier plutôt que recalculée sur le
+ * total : chaque dossier a sa propre ventilation UE / hors UE, et une moyenne
+ * effacerait précisément ce qui fait la différence.
+ */
+export function agencyTotals(files: ClientFile[]): AgencyTotals {
   const counted = files.filter((file) => file.counts_towards_revenue);
-  return { ...totalMargin(counted.map((file) => file.margin)), files: counted.length };
+  const margin = totalMargin(counted.map((file) => file.margin));
+  const vat = counted.reduce((total, file) => total + file.vat.vat_cents, 0);
+
+  return {
+    ...margin,
+    files: counted.length,
+    vat_cents: vat,
+    margin_net_cents: margin.margin_cents - vat,
+  };
 }
 
 /* ------------------------------------------------------------------ rôles */

@@ -91,9 +91,9 @@ export function seedIfEmpty(db: Database.Database): void {
     );
     const insertBooking = db.prepare(
       `INSERT INTO bookings (trip_id, type, vendor, reference, description, start_at, end_at,
-                             amount_cents, agency_quote_cents, nights, booked_by)
+                             amount_cents, agency_quote_cents, zone, nights, booked_by)
        VALUES (@trip, @type, @vendor, @reference, @description, @start_at, @end_at,
-               @amount, @quote, @nights, @booked_by)`,
+               @amount, @quote, @zone, @nights, @booked_by)`,
     );
     const insertExpense = db.prepare(
       `INSERT INTO expenses (trip_id, paid_by, category, description, spent_on, amount_cents,
@@ -154,6 +154,7 @@ export function seedIfEmpty(db: Database.Database): void {
           end_at: booking.end_at ?? null,
           amount: booking.amount_cents,
           quote: booking.agency_quote_cents ?? 0,
+          zone: booking.zone ?? "eu",
           nights: booking.nights ?? null,
           booked_by: ownerId,
         });
@@ -201,6 +202,8 @@ interface DemoBooking {
   end_at?: string;
   amount_cents: number;
   agency_quote_cents?: number;
+  /** Lieu d'exécution : décide de la TVA sur marge. */
+  zone?: "eu" | "non_eu";
   nights?: number;
 }
 
@@ -369,6 +372,18 @@ function demoTrips(d: (offset: number) => string): DemoTrip[] {
           end_at: d(126),
           amount_cents: 148_000,
           agency_quote_cents: 160_900,
+          zone: "non_eu",
+        },
+        {
+          type: "stay",
+          vendor: "Ryokan Gion",
+          description: "5 nuits, chambre traditionnelle",
+          start_at: d(112),
+          end_at: d(117),
+          amount_cents: 96_000,
+          agency_quote_cents: 112_000,
+          zone: "non_eu",
+          nights: 5,
         },
       ],
     },

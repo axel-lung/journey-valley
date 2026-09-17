@@ -64,6 +64,19 @@ export function BookingForm({
         </Field>
       </div>
 
+      <Field
+        label="Prestation exécutée"
+        hint={
+          error("zone") ??
+          "Décide de la TVA sur marge : la part hors UE en est exonérée, et la ventilation se fait au prorata des achats."
+        }
+      >
+        <select name="zone" defaultValue="eu" className={inputClass}>
+          <option value="eu">Dans l'Union européenne</option>
+          <option value="non_eu">Hors UE</option>
+        </select>
+      </Field>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="À partir du" hint={error("start_at")}>
           <input

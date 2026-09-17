@@ -1,4 +1,5 @@
 import type { Currency } from "./money";
+import type { VatZone } from "./vat";
 
 /** What a subscriber gets. Limits live in `plans.ts`. */
 export type Plan = "free" | "plus";
@@ -56,6 +57,10 @@ export interface Agency {
   brand_colour: string;
   /** Taux de marque visé, in percent; what the sell-price assistant aims for. */
   target_margin_percent: number;
+  /** Taux de TVA applicable à la marge, en points. */
+  vat_rate: number;
+  /** 0 for an agency outside the margin scheme (franchise en base). */
+  vat_on_margin: number;
   currency: Currency;
   created_at: string;
 }
@@ -129,6 +134,8 @@ export interface Booking {
   amount_cents: number;
   /** What this line sells for; 0 when no sell price has been set. */
   agency_quote_cents: number;
+  /** Where the service is performed — the key to the VAT-on-margin split. */
+  zone: VatZone;
   nights: number | null;
   booked_by: number | null;
   created_at: string;

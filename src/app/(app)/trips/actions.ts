@@ -153,6 +153,7 @@ const bookingSchema = z.object({
   end_at: z.string().optional(),
   amount: z.string().trim().min(1, "Combien avez-vous payé ?"),
   agency_quote: z.string().trim().default(""),
+  zone: z.enum(["eu", "non_eu"]).default("eu"),
   nights: z.string().optional(),
 });
 
@@ -183,8 +184,8 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
   getDb()
     .prepare(
       `INSERT INTO bookings (trip_id, type, vendor, reference, description, start_at, end_at,
-                             amount_cents, agency_quote_cents, nights, booked_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             amount_cents, agency_quote_cents, zone, nights, booked_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       trip.id,
@@ -196,6 +197,7 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
       parsed.data.end_at || null,
       amount,
       quote,
+      parsed.data.zone,
       nights,
       user.id,
     );

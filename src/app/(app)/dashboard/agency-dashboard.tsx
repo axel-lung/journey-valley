@@ -63,11 +63,11 @@ export function AgencyDashboard({ user, agency }: { user: User; agency: Agency |
       </header>
 
       <HeroStat
-        label="Marge sur les dossiers réservés"
-        value={formatMoney(totals.margin_cents, currency)}
+        label="Marge nette sur les dossiers réservés"
+        value={formatMoney(totals.margin_net_cents, currency)}
         hint={
           totals.files > 0
-            ? `${totals.files} dossier${totals.files > 1 ? "s" : ""} · ${formatMoney(totals.sell_cents, currency)} vendus · ${totals.margin_percent} % de marque.`
+            ? `${totals.files} dossier${totals.files > 1 ? "s" : ""} · ${formatMoney(totals.sell_cents, currency)} vendus · ${formatMoney(totals.vat_cents, currency)} de TVA sur marge déduite.`
             : "Rien de réservé pour l'instant : la marge se compte une fois les achats faits."
         }
         aside={

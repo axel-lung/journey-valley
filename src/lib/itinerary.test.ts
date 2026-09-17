@@ -17,6 +17,7 @@ function booking(overrides: Partial<Booking>): Booking {
     end_at: null,
     amount_cents: 10_000,
     agency_quote_cents: 0,
+    zone: "eu",
     nights: null,
     booked_by: null,
     created_at: "2026-01-01",

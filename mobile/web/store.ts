@@ -381,6 +381,8 @@ export function addBooking(input: NewBookingInput): void {
     end_at: input.end_at,
     amount_cents: input.amount_cents,
     agency_quote_cents: input.agency_quote_cents,
+    // Le téléphone ne fait pas de TVA : la zone existe pour la forme partagée.
+    zone: "eu",
     nights: input.nights,
     booked_by: null,
     created_at: today(),
