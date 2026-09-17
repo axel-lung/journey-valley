@@ -26,20 +26,10 @@ export function createAgency(input: { name: string; currency: string }): Agency 
   return getAgency(Number(result.lastInsertRowid))!;
 }
 
-export type AgencyPatch = Partial<
-  Pick<
-    Agency,
-    | "name"
-    | "legal_name"
-    | "registration"
-    | "email"
-    | "phone"
-    | "website"
-    | "brand_colour"
-    | "target_margin_percent"
-  >
->;
-
+/**
+ * Les colonnes qu'un formulaire a le droit de toucher. La liste sert à la fois
+ * de type et de garde : une clé venue d'ailleurs ne peut pas atteindre la base.
+ */
 const PATCHABLE = [
   "name",
   "legal_name",
@@ -49,7 +39,15 @@ const PATCHABLE = [
   "website",
   "brand_colour",
   "target_margin_percent",
+  "vat_rate",
+  "vat_on_margin",
+  "financial_guarantee",
+  "liability_insurance",
+  "mediator",
+  "terms",
 ] as const;
+
+export type AgencyPatch = Partial<Pick<Agency, (typeof PATCHABLE)[number]>>;
 
 export function updateAgency(agencyId: number, patch: AgencyPatch): void {
   // La liste blanche évite qu'une clé venue d'un formulaire touche une colonne

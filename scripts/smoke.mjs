@@ -159,6 +159,8 @@ try {
   await page.waitForSelector("text=Norwegian");
   check("the booking lands on the dossier", await page.getByText("Norwegian").first().isVisible());
 
+  await page.goto(`${tripUrl}/prix`);
+
   // Acheté 1 200, vendu 1 500 : 300 de marge, soit 20 % de marque et 25 % de
   // marge. Les deux taux doivent être distincts à l'écran.
   check(
@@ -194,7 +196,8 @@ try {
     await page.getByRole("button", { name: "C'est parti !" }).isVisible(),
   );
 
-  // 5. On-trip spending shows up against the budget.
+  // 5. On-trip spending shows up against the budget — onglet Voyageurs.
+  await page.goto(`${tripUrl}/voyageurs`);
   await page.getByText("Noter une dépense").click();
   const expenseForm = page.locator('form:has(input[name="shared"])');
   await expenseForm.locator('input[name="amount"]').fill("68,40");
@@ -208,7 +211,8 @@ try {
     await page.getByText(/1\s268,40\s€/).first().isVisible(),
   );
 
-  // 5b. Search, import a result, and set a price alert.
+  // 5b. Search, import a result, and set a price alert — onglet Prix & marge.
+  await page.goto(`${tripUrl}/prix`);
   const searchForm = page.locator('form:has(input[name="target"])');
   await searchForm.locator('input[name="destination"]').fill("Oslo");
   await searchForm.locator('input[name="target"]').fill("400");
@@ -219,23 +223,31 @@ try {
     await page.getByText("ne correspondent à aucune offre réservable").isVisible(),
   );
 
-  const bookingsBefore = await page.locator("text=/^Réservations \\(\\d+\\)$/").innerText();
+  // Le nom du premier résultat, pour le retrouver ensuite dans le programme.
+  const firstResult = await page
+    .locator("li")
+    .filter({ has: page.getByRole("button", { name: "Ajouter", exact: true }) })
+    .first()
+    .locator("p.font-medium")
+    .innerText();
   await page.getByRole("button", { name: "Ajouter", exact: true }).first().click();
-  await page.waitForFunction(
-    (before) => !document.body.innerText.includes(before),
-    bookingsBefore,
-  );
-  check(
-    "a search result can be imported as a booking",
-    (await page.locator("text=/^Réservations \\(\\d+\\)$/").innerText()) !== bookingsBefore,
-  );
+  await page.waitForTimeout(500);
 
   // La ligne importée arrive sans prix de vente : la marge devient un plancher,
   // et l'écran doit le dire plutôt que d'annoncer un résultat faux.
+  await page.goto(`${tripUrl}/prix`);
   check(
     "an unpriced line makes the margin a floor, and says so",
     await page.getByText(/sans prix de vente/).first().isVisible(),
   );
+
+  await page.goto(tripUrl);
+  check(
+    "a search result can be imported as a booking",
+    await page.getByText(firstResult).first().isVisible(),
+    firstResult,
+  );
+  await page.goto(`${tripUrl}/prix`);
 
   await searchForm.locator('input[name="destination"]').fill("Oslo");
   await searchForm.locator('input[name="target"]').fill("400");
@@ -243,7 +255,7 @@ try {
   await page.waitForSelector("text=Vérifier maintenant");
   check("a price alert can be created", await page.getByText(/Vol .*Oslo/).first().isVisible());
 
-  await page.getByRole("button", { name: "Vérifier maintenant" }).click();
+  await page.getByRole("button", { name: "Vérifier maintenant" }).first().click();
   await page.waitForSelector("text=Dernière vérification");
   check(
     "checking an alert records a price",
@@ -266,6 +278,7 @@ try {
   );
 
   // 5d. The destination file and the day-by-day programme.
+  await page.goto(`${tripUrl}/destination`);
   check(
     "the destination file is rendered",
     await page.getByText("Oslo, en pratique").isVisible(),
@@ -276,12 +289,12 @@ try {
   );
   check(
     "the day-by-day programme lists the trip's days",
-    await page.getByText("Jour 1").first().isVisible(),
+    await page.goto(tripUrl).then(() => page.getByText("Jour 1").first().isVisible()),
   );
 
   // 5e. The printable travel book.
   await page.getByRole("link", { name: "Carnet de voyage" }).click();
-  await page.waitForURL(/\/carnet$/);
+  await page.waitForURL(/\/carnet\/\d+$/);
   check("the travel book opens", await page.getByText("Carnet de voyage").first().isVisible());
   check(
     "the travel book carries the bookings",
@@ -291,8 +304,7 @@ try {
     "the travel book carries the emergency page",
     await page.getByText("En cas de pépin").isVisible(),
   );
-  await page.goBack();
-  await page.waitForURL(/\/trips\/\d+$/);
+  await page.goto(tripUrl);
 
   // 6. The preparation checklist.
   await page.getByRole("button", { name: "Ajouter les essentiels" }).click();
@@ -303,6 +315,69 @@ try {
   check(
     "a checklist item can be ticked off",
     await page.getByRole("button", { name: "Décocher Assurance voyage" }).isVisible(),
+  );
+
+  // 6b. Le devis : conformité, envoi, lien public, acceptation.
+  await page.goto(`${tripUrl}/devis`);
+  check(
+    "an agency with no legal mentions is told its quote would not be compliant",
+    await page.getByText("Votre devis ne serait pas conforme").isVisible(),
+  );
+
+  // On complète la fiche agence, puis le devis devient présentable.
+  await page.goto(`${BASE}/account`);
+  await page.fill('input[name="registration"]', "IM069250014");
+  await page.fill('input[name="financial_guarantee"]', "APST, 15 avenue Carnot, 75017 Paris");
+  await page.fill('input[name="liability_insurance"]', "Allianz — contrat n° 123456");
+  await page.fill('input[name="legal_name"]', "Agence Témoin SARL");
+  await page
+    .locator('form:has(input[name="registration"])')
+    .getByRole("button", { name: "Enregistrer" })
+    .click();
+  await page.waitForSelector("text=Fiche agence enregistrée");
+
+  await page.goto(`${tripUrl}/devis`);
+  check(
+    "filling the legal mentions clears the compliance warning",
+    (await page.getByText("Votre devis ne serait pas conforme").count()) === 0,
+  );
+
+  await page.fill('textarea[name="intro"]', "Comme convenu, voici votre séjour à Oslo.");
+  await page.getByRole("button", { name: "Préparer le devis" }).click();
+  await page.waitForSelector("text=Brouillon");
+  check("a quote is drafted from the priced lines", await page.getByText(/DEV-\d{4}-0001/).isVisible());
+
+  await page.getByRole("button", { name: "Envoyer au client" }).click();
+  await page.waitForSelector("text=Lien à envoyer");
+  check("sending the quote freezes it and yields a public link", await page.getByText("Envoyé").first().isVisible());
+
+  // Le lien public : ouvert sans compte, dans un onglet neuf.
+  const quoteHref = await page.getByRole("link", { name: "Voir le devis" }).first().getAttribute("href");
+  const guest = await browser.newPage();
+  await guest.goto(`${BASE}${quoteHref}`);
+  check(
+    "the public quote carries the standardised information form",
+    await guest.getByText("Formulaire d'information standardisé").isVisible(),
+  );
+  check(
+    "the public quote carries the agency's registration",
+    await guest.getByText("IM069250014").isVisible(),
+  );
+  check(
+    "the public quote never shows a purchase cost",
+    !(await guest.locator("body").innerText()).includes("1 200"),
+  );
+
+  await guest.fill('input[name="name"]', "Sam Ortega");
+  await guest.getByRole("button", { name: "J'accepte ce devis" }).click();
+  await guest.waitForSelector("text=Vous avez accepté ce devis");
+  check("the client can accept from the public link", await guest.getByText("Vous avez accepté ce devis").isVisible());
+  await guest.close();
+
+  await page.goto(`${tripUrl}/devis`);
+  check(
+    "the acceptance is recorded against the quote, with a name",
+    await page.getByText(/Accepté par Sam Ortega/).isVisible(),
   );
 
   // 7. La page Marges additionne les dossiers engagés.
@@ -342,10 +417,12 @@ try {
   const response = await page.goto(tripUrl);
   check("someone else's trip is not visible", response.status() === 404, `status ${response?.status()}`);
 
-  // 11. The seeded shared trip settles up.
+  // 11. The seeded shared trip settles up — onglet Voyageurs.
   await page.goto(`${BASE}/trips?filter=all`);
   await page.getByText("Week-end à Lisbonne").click();
   await page.waitForURL(/\/trips\/\d+$/);
+  const lisbonUrl = page.url();
+  await page.goto(`${lisbonUrl}/voyageurs`);
   check("shared costs produce a settlement", await page.getByText("Pour être quittes").isVisible());
   check("balances are shown per traveller", await page.getByText("Sam Ortega").first().isVisible());
 

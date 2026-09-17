@@ -136,3 +136,40 @@ describe("countryCodeFromName", () => {
     expect(practicalFor("XX")).toBeNull();
   });
 });
+
+describe("return legs", () => {
+  it("puts a round trip's return on its own day instead of spanning the trip", () => {
+    // Un aller-retour de deux semaines s'affichait « en cours » tous les jours :
+    // exact au sens des dates, illisible sur un programme.
+    const itinerary = buildItinerary(
+      { start_date: "2026-10-12", end_date: "2026-10-16" },
+      [booking({ type: "flight", start_at: "2026-10-12", end_at: "2026-10-16" })],
+      [],
+    );
+
+    expect(itinerary.days[0].starts).toHaveLength(1);
+    expect(itinerary.days.slice(1).flatMap((day) => day.ongoing)).toHaveLength(0);
+    expect(itinerary.days[4].returns).toHaveLength(1);
+  });
+
+  it("still spreads a stay across the nights it covers", () => {
+    const itinerary = buildItinerary(
+      { start_date: "2026-10-12", end_date: "2026-10-16" },
+      [booking({ type: "stay", start_at: "2026-10-12", end_at: "2026-10-16", nights: 4 })],
+      [],
+    );
+
+    expect(itinerary.days[1].ongoing).toHaveLength(1);
+    expect(itinerary.days[4].returns).toHaveLength(0);
+  });
+
+  it("counts a day with only a return as busy", () => {
+    const itinerary = buildItinerary(
+      { start_date: "2026-10-12", end_date: "2026-10-16" },
+      [booking({ type: "flight", start_at: "2026-10-12", end_at: "2026-10-16" })],
+      [],
+    );
+
+    expect(emptyDays(itinerary).map((day) => day.date)).not.toContain("2026-10-16");
+  });
+});

@@ -78,6 +78,43 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS quotes (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id         INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      agency_id       INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+      reference       TEXT NOT NULL,
+      -- Le lien public : long, aléatoire, et le seul moyen d'ouvrir le devis
+      -- sans compte. Il vaut authentification, donc il ne doit jamais être
+      -- devinable ni réutilisé d'un devis à l'autre.
+      token           TEXT NOT NULL UNIQUE,
+      status          TEXT NOT NULL DEFAULT 'draft'
+                      CHECK (status IN ('draft','sent','accepted','declined')),
+      title           TEXT NOT NULL,
+      intro           TEXT NOT NULL DEFAULT '',
+      terms           TEXT NOT NULL DEFAULT '',
+      total_cents     INTEGER NOT NULL DEFAULT 0,
+      deposit_percent INTEGER NOT NULL DEFAULT 30,
+      valid_until     TEXT,
+      sent_at         TEXT,
+      decided_at      TEXT,
+      -- La trace de l'acceptation en ligne : qui a cliqué, quand, d'où.
+      decided_by_name TEXT,
+      decided_ip      TEXT,
+      decided_note    TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS quote_lines (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      quote_id    INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+      label       TEXT NOT NULL,
+      detail      TEXT NOT NULL DEFAULT '',
+      start_at    TEXT,
+      end_at      TEXT,
+      price_cents INTEGER NOT NULL DEFAULT 0,
+      position    INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id         TEXT PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -192,6 +229,9 @@ export function migrate(db: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_clients_agency ON clients(agency_id, name);
+    CREATE INDEX IF NOT EXISTS idx_quotes_trip ON quotes(trip_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_quotes_agency ON quotes(agency_id, status);
+    CREATE INDEX IF NOT EXISTS idx_quote_lines ON quote_lines(quote_id, position, id);
     CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner_id, stage);
     CREATE INDEX IF NOT EXISTS idx_members_user ON trip_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_trip ON bookings(trip_id);
@@ -220,6 +260,12 @@ export function migrate(db: Database.Database): void {
   addColumn(db, "bookings", "zone", "TEXT NOT NULL DEFAULT 'eu'");
   addColumn(db, "agencies", "vat_rate", "INTEGER NOT NULL DEFAULT 20");
   addColumn(db, "agencies", "vat_on_margin", "INTEGER NOT NULL DEFAULT 1");
+
+  // Mentions que le code du tourisme impose de porter sur un devis de forfait.
+  addColumn(db, "agencies", "financial_guarantee", "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, "agencies", "liability_insurance", "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, "agencies", "mediator", "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, "agencies", "terms", "TEXT NOT NULL DEFAULT ''");
 }
 
 /** Adds a column only when the table does not already have it. */

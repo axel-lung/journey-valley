@@ -16,6 +16,13 @@ export interface ItineraryDay {
   starts: Booking[];
   /** Stays and hires that merely cover it, so a hotel is not repeated daily. */
   ongoing: Booking[];
+  /**
+   * Prestations qui *se terminent* ce jour-là et qu'il faut annoncer : le vol
+   * retour, la restitution de la voiture. Sans cela, un aller-retour sur deux
+   * semaines s'affichait « en cours » quinze jours de suite — vrai au sens des
+   * dates, absurde sur un programme.
+   */
+  returns: Booking[];
   expenses: Expense[];
   /** What this day costs: the bookings that start, plus the spending. */
   total_cents: number;
@@ -58,6 +65,7 @@ export function buildItinerary(
       day_number: position + 1,
       starts: [],
       ongoing: [],
+      returns: [],
       expenses: [],
       total_cents: 0,
     });
@@ -76,10 +84,16 @@ export function buildItinerary(
       outside.bookings.push(booking);
     }
 
-    // A stay covers the days between its start and its end, exclusive of both:
-    // the first is already "starts", the last is the day you check out.
     const end = booking.end_at?.slice(0, 10);
     if (!end || end <= start) continue;
+
+    // Un déplacement n'occupe pas les jours qu'il enjambe : sa date de fin est
+    // le retour, un événement en soi. Un logement ou une location, si : ils
+    // couvrent les jours intermédiaires, et se terminent sans cérémonie.
+    if (booking.type === "flight" || booking.type === "transport") {
+      index.get(end)?.returns.push(booking);
+      continue;
+    }
 
     for (const date of dates) {
       if (date > start && date < end) index.get(date)?.ongoing.push(booking);
@@ -102,6 +116,10 @@ export function buildItinerary(
 /** Days that have nothing on them at all — the gaps worth filling. */
 export function emptyDays(itinerary: Itinerary): ItineraryDay[] {
   return itinerary.days.filter(
-    (day) => day.starts.length === 0 && day.ongoing.length === 0 && day.expenses.length === 0,
+    (day) =>
+      day.starts.length === 0 &&
+      day.ongoing.length === 0 &&
+      day.returns.length === 0 &&
+      day.expenses.length === 0,
   );
 }

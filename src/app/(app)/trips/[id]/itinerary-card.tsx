@@ -67,7 +67,10 @@ export function ItineraryCard({
               )}
             </div>
 
-            {day.starts.length === 0 && day.ongoing.length === 0 && day.expenses.length === 0 ? (
+            {day.starts.length === 0 &&
+            day.ongoing.length === 0 &&
+            day.returns.length === 0 &&
+            day.expenses.length === 0 ? (
               <p className="mt-1 text-sm text-stone-400">Rien de prévu.</p>
             ) : (
               <ul className="mt-2 space-y-1.5 text-sm">
@@ -86,6 +89,12 @@ export function ItineraryCard({
                   </li>
                 ))}
 
+                {day.returns.map((booking) => (
+                  <li key={`r${booking.id}`} className="text-stone-600">
+                    <span aria-hidden className="mr-1.5 text-stone-400">↩</span>
+                    {booking.vendor} — retour
+                  </li>
+                ))}
                 {day.ongoing.map((booking) => (
                   <li key={`o${booking.id}`} className="flex gap-2 text-stone-500">
                     <span aria-hidden className="text-stone-300">

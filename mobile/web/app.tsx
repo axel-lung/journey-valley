@@ -557,7 +557,10 @@ function TripScreen({
                     </span>
                   )}
                 </div>
-                {day.starts.length === 0 && day.ongoing.length === 0 && day.expenses.length === 0 ? (
+                {day.starts.length === 0 &&
+                day.ongoing.length === 0 &&
+                day.returns.length === 0 &&
+                day.expenses.length === 0 ? (
                   <p className="mt-1 text-sm text-stone-400">Rien de prévu.</p>
                 ) : (
                   <ul className="mt-1 space-y-1 text-sm text-stone-700">
@@ -565,6 +568,11 @@ function TripScreen({
                       <li key={`s${booking.id}`}>
                         <strong className="font-medium">{booking.vendor}</strong>
                         {booking.description ? ` — ${booking.description}` : ""}
+                      </li>
+                    ))}
+                    {day.returns.map((booking) => (
+                      <li key={`r${booking.id}`} className="text-stone-600">
+                        {booking.vendor} — retour
                       </li>
                     ))}
                     {day.ongoing.map((booking) => (
@@ -1601,7 +1609,7 @@ function CarnetScreen({
                   Jour {day.day_number}
                   <span className="ml-2 font-normal text-stone-500">{formatDate(day.date)}</span>
                 </p>
-                {day.starts.length === 0 && day.ongoing.length === 0 ? (
+                {day.starts.length === 0 && day.ongoing.length === 0 && day.returns.length === 0 ? (
                   <p className="text-stone-400">Libre.</p>
                 ) : (
                   <>
@@ -1613,6 +1621,11 @@ function CarnetScreen({
                         </li>
                       ))}
                     </ul>
+                    {day.returns.length > 0 && (
+                      <p className="text-stone-700">
+                        Retour : {day.returns.map((booking) => booking.vendor).join(", ")}
+                      </p>
+                    )}
                     {/* Une ligne par prestation en cours remplirait la page de
                         répétitions : sur papier, une seule suffit. */}
                     {day.ongoing.length > 0 && (

@@ -172,7 +172,10 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
               <p className="text-sm font-semibold text-stone-900">
                 Jour {day.day_number} · {formatDate(day.date)}
               </p>
-              {day.starts.length === 0 && day.ongoing.length === 0 && day.expenses.length === 0 ? (
+              {day.starts.length === 0 &&
+              day.ongoing.length === 0 &&
+              day.returns.length === 0 &&
+              day.expenses.length === 0 ? (
                 <p className="text-sm text-stone-400">Journée libre.</p>
               ) : (
                 <ul className="mt-1 space-y-1 text-sm text-stone-700">
@@ -181,6 +184,9 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
                       <strong>{booking.vendor}</strong>
                       {booking.description ? ` — ${booking.description}` : ""}
                     </li>
+                  ))}
+                  {day.returns.map((booking) => (
+                    <li key={`r${booking.id}`}>{booking.vendor} — retour</li>
                   ))}
                   {day.ongoing.map((booking) => (
                     <li key={`o${booking.id}`} className="text-stone-500">

@@ -1,7 +1,10 @@
 import { SubmitButton } from "@/components/submit-button";
 import { Badge, Card, buttonClass, secondaryButtonClass } from "@/components/ui";
 import { homeStats } from "@/lib/analytics";
+import { getAgency, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
+import { checkCompliance } from "@/lib/legal";
+import { AgencyForm } from "./agency-form";
 import { formatMoney } from "@/lib/money";
 import { PLANS } from "@/lib/plans";
 import { countActiveTrips } from "@/lib/trips";
@@ -13,16 +16,30 @@ export default async function AccountPage() {
   const stats = homeStats(user.id);
   const active = countActiveTrips(user.id);
   const currentPlan = PLANS[user.plan];
+  const advisor = isAdvisor(user);
+  const agency = getAgency(user.agency_id);
+  const compliance = checkCompliance(agency);
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold text-stone-900">Mon compte</h1>
+        <h1 className="text-2xl font-semibold text-stone-900">
+          {advisor ? "Mon agence" : "Mon compte"}
+        </h1>
         <p className="mt-1.5 text-sm text-stone-500">
-          Forfait {currentPlan.name}, {active} voyage{active > 1 ? "s" : ""} en cours, et{" "}
-          {formatMoney(stats.saved_cents, user.currency)} gardés face aux devis d'agence.
+          {advisor
+            ? compliance.ready
+              ? "Vos mentions légales sont complètes : vos devis sont présentables."
+              : `${compliance.missing.length} mention${compliance.missing.length > 1 ? "s" : ""} manquante${compliance.missing.length > 1 ? "s" : ""} — vos devis ne sont pas conformes tant qu'elle${compliance.missing.length > 1 ? "s ne sont" : " n'est"} pas renseignée${compliance.missing.length > 1 ? "s" : ""}.`
+            : `Forfait ${currentPlan.name}, ${active} voyage${active > 1 ? "s" : ""} en cours.`}
         </p>
       </header>
+
+      {agency && (
+        <Card title="La fiche de votre agence">
+          <AgencyForm agency={agency} />
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {Object.values(PLANS).map((plan) => {

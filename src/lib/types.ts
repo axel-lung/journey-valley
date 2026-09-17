@@ -61,6 +61,14 @@ export interface Agency {
   vat_rate: number;
   /** 0 for an agency outside the margin scheme (franchise en base). */
   vat_on_margin: number;
+  /** Garant financier (APST, banque…), nommé sur le formulaire standardisé. */
+  financial_guarantee: string;
+  /** Assureur en responsabilité civile professionnelle et n° de contrat. */
+  liability_insurance: string;
+  /** Médiateur de la consommation dont l'agence relève. */
+  mediator: string;
+  /** Conditions particulières de vente, reprises sur chaque devis. */
+  terms: string;
   currency: Currency;
   created_at: string;
 }

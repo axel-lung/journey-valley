@@ -10,6 +10,7 @@ export function SubmitButton({
   name,
   value,
   formAction,
+  onClick,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
@@ -17,6 +18,8 @@ export function SubmitButton({
   name?: string;
   value?: string;
   formAction?: (formData: FormData) => void | Promise<void>;
+  /** Pour ajuster l'écran au moment du clic, avant que l'action réponde. */
+  onClick?: () => void;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -25,6 +28,7 @@ export function SubmitButton({
       name={name}
       value={value}
       formAction={formAction}
+      onClick={onClick}
       disabled={pending}
       className={className}
     >

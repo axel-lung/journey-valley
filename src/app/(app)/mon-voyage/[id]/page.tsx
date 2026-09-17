@@ -105,7 +105,7 @@ export default async function MyTripPage({ params }: { params: Promise<{ id: str
                   Jour {day.day_number}
                   <span className="ml-2 font-normal text-stone-500">{formatDate(day.date)}</span>
                 </p>
-                {day.starts.length === 0 && day.ongoing.length === 0 ? (
+                {day.starts.length === 0 && day.ongoing.length === 0 && day.returns.length === 0 ? (
                   <p className="mt-1 text-sm text-stone-400">Journée libre.</p>
                 ) : (
                   <ul className="mt-1.5 space-y-1 text-sm text-stone-700">
@@ -113,6 +113,11 @@ export default async function MyTripPage({ params }: { params: Promise<{ id: str
                       <li key={`s${booking.id}`}>
                         <strong className="font-medium">{booking.vendor}</strong>
                         {booking.description ? ` — ${booking.description}` : ""}
+                      </li>
+                    ))}
+                    {day.returns.map((booking) => (
+                      <li key={`r${booking.id}`}>
+                        <strong className="font-medium">{booking.vendor}</strong> — retour
                       </li>
                     ))}
                     {day.ongoing.length > 0 && (
@@ -174,7 +179,7 @@ export default async function MyTripPage({ params }: { params: Promise<{ id: str
 
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          href={`/trips/${trip.id}/carnet`}
+          href={`/carnet/${trip.id}`}
           className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
         >
           Ouvrir mon carnet de voyage
