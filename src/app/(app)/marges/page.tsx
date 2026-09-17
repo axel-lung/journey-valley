@@ -5,6 +5,7 @@ import { agencyTotals, getAgency, isAdvisor, listAgencyFiles } from "@/lib/agenc
 import { requireUser } from "@/lib/auth";
 import { formatDateRange } from "@/lib/format";
 import { marginByMonth } from "@/lib/margin";
+import { buildVatReturn } from "@/lib/vat-return";
 import { formatMoney } from "@/lib/money";
 import { STAGE_LABEL } from "@/lib/stages";
 
@@ -32,15 +33,25 @@ export default async function MarginsPage() {
     counted.map((file) => ({ start_date: file.trip.start_date, margin: file.margin })),
   );
   const target = agency?.target_margin_percent ?? 15;
+  const vatReturn = user.agency_id ? buildVatReturn(user.agency_id) : { lines: [], months: [], incomplete: false };
   const below = counted.filter((file) => file.margin.margin_percent < target);
 
   return (
     <div className="space-y-7">
-      <header>
-        <h1 className="text-2xl font-semibold text-stone-900">Marges</h1>
-        <p className="mt-1.5 text-sm text-stone-500">
-          Sur les dossiers réservés : avant la réservation, les achats ne sont pas tous saisis et la marge n'est qu'une prévision.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-stone-900">Marges</h1>
+          <p className="mt-1.5 text-sm text-stone-500">
+            Sur les dossiers réservés : avant la réservation, les achats ne sont pas tous saisis et
+            la marge n'est qu'une prévision.
+          </p>
+        </div>
+        <a
+          href="/api/tva-marge"
+          className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+        >
+          Export TVA (CSV)
+        </a>
       </header>
 
       <HeroStat
@@ -165,6 +176,45 @@ export default async function MarginsPage() {
             ))}
           </TableShell>
         )}
+      </Card>
+
+      <Card title="TVA sur marge, pour votre comptable">
+        <div className="space-y-2 px-5 py-4 text-sm text-stone-600">
+          {vatReturn.months.length === 0 ? (
+            <p>
+              Rien à déclarer pour l'instant : la base du régime est constituée des
+              <strong> encaissements</strong>, donc des factures réglées.
+            </p>
+          ) : (
+            <>
+              <ul className="space-y-1">
+                {vatReturn.months.map((month) => (
+                  <li key={month.month} className="flex justify-between gap-3 tabular-nums">
+                    <span>{month.month}</span>
+                    <span className="text-stone-500">
+                      {formatMoney(month.paid_cents, currency)} encaissés · base taxable{" "}
+                      {formatMoney(month.taxable_margin_cents, currency)}
+                    </span>
+                    <strong className="text-stone-800">
+                      {formatMoney(month.vat_cents, currency)}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs leading-relaxed text-stone-500">
+                Base = encaissements de la période, la TVA du dossier étant répartie au prorata de
+                ce qui a été encaissé. Document de travail : à confronter avec votre comptabilité
+                avant toute déclaration. L'export CSV contient le détail facture par facture.
+              </p>
+              {vatReturn.incomplete && (
+                <p className="text-xs text-amber-700">
+                  Un dossier encaissé n'a pas de prix de vente : sa part de marge n'a pas pu être
+                  répartie.
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </Card>
 
       <p className="text-xs leading-relaxed text-stone-500">

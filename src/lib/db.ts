@@ -115,6 +115,25 @@ export function migrate(db: Database.Database): void {
       position    INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS invoices (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id      INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      agency_id    INTEGER NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+      quote_id     INTEGER REFERENCES quotes(id) ON DELETE SET NULL,
+      reference    TEXT NOT NULL,
+      token        TEXT NOT NULL UNIQUE,
+      kind         TEXT NOT NULL CHECK (kind IN ('deposit','balance','full')),
+      status       TEXT NOT NULL DEFAULT 'draft'
+                   CHECK (status IN ('draft','issued','paid','cancelled')),
+      label        TEXT NOT NULL DEFAULT '',
+      total_cents  INTEGER NOT NULL DEFAULT 0,
+      due_date     TEXT,
+      issued_at    TEXT,
+      paid_at      TEXT,
+      payment_note TEXT NOT NULL DEFAULT '',
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id         TEXT PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -232,6 +251,8 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_quotes_trip ON quotes(trip_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_quotes_agency ON quotes(agency_id, status);
     CREATE INDEX IF NOT EXISTS idx_quote_lines ON quote_lines(quote_id, position, id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_trip ON invoices(trip_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_invoices_agency ON invoices(agency_id, status, paid_at);
     CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner_id, stage);
     CREATE INDEX IF NOT EXISTS idx_members_user ON trip_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_trip ON bookings(trip_id);

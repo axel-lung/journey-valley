@@ -15,8 +15,12 @@ import {
   QUOTE_STATUS_LABEL,
   QUOTE_STATUS_TONE,
 } from "@/lib/quotes";
+import { billingFor, suggestedAmount } from "@/lib/invoices";
+import { listInvoices } from "@/lib/invoices-store";
+import { dossierMargin } from "@/lib/margin";
 import { getTripSummary, listBookings } from "@/lib/trips";
 import { deleteQuoteAction, sendQuoteAction } from "./actions";
+import { InvoicesCard } from "./invoices-card";
 import { NewQuoteForm } from "./new-quote-form";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +49,19 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
   const sellable =
     trip.agency_quote_cents > 0 ||
     bookings.some((booking) => booking.agency_quote_cents > 0);
+
+  const margin = dossierMargin(trip, bookings);
+  const invoices = listInvoices(trip.id);
+  const billing = billingFor(margin.sell_cents, invoices);
+  // Le devis accepté le plus récent sert de référence à la facture ; à défaut,
+  // le dossier lui-même fait foi.
+  const accepted = quotes.find((quote) => quote.status === "accepted") ?? null;
+  const reference = accepted ?? { total_cents: margin.sell_cents, deposit_percent: 30 };
+  const suggestions = {
+    deposit: suggestedAmount("deposit", reference, billing),
+    balance: suggestedAmount("balance", reference, billing),
+    full: suggestedAmount("full", reference, billing),
+  };
 
   return (
     <div className="space-y-6">
@@ -161,6 +178,17 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
             })}
           </ul>
         )}
+      </Card>
+
+      <Card title={`Factures (${invoices.length})`}>
+        <InvoicesCard
+          tripId={trip.id}
+          quoteId={accepted?.id ?? null}
+          invoices={invoices}
+          billing={billing}
+          suggestions={suggestions}
+          currency={currency}
+        />
       </Card>
 
       {sellable && (

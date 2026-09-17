@@ -1,6 +1,8 @@
 import type { Currency } from "./money";
 import type { VatZone } from "./vat";
 
+export type { VatZone };
+
 /** What a subscriber gets. Limits live in `plans.ts`. */
 export type Plan = "free" | "plus";
 

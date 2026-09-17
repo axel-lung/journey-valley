@@ -6,6 +6,17 @@ import { z } from "zod";
 import { assertAdvisor, getAgency } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { recordActivity } from "@/lib/db";
+import { billingFor } from "@/lib/invoices";
+import {
+  cancel,
+  createInvoice,
+  getInvoice,
+  issue,
+  listInvoices,
+  markPaid,
+} from "@/lib/invoices-store";
+import { dossierMargin } from "@/lib/margin";
+import { formatMoney, parseAmountToCents } from "@/lib/money";
 import { createQuote, deleteQuote, getQuote, markSent } from "@/lib/quotes";
 import { getTrip, listBookings, membershipRole } from "@/lib/trips";
 
@@ -106,4 +117,126 @@ export async function deleteQuoteAction(formData: FormData): Promise<void> {
 
   deleteQuote(quote.id);
   revalidatePath(`/trips/${quote.trip_id}/devis`);
+}
+
+/* ---------------------------------------------------------------- factures */
+
+const invoiceSchema = z.object({
+  trip_id: z.coerce.number().int().positive(),
+  quote_id: z.coerce.number().int().positive().optional(),
+  kind: z.enum(["deposit", "balance", "full"]),
+  amount: z.string().trim().default(""),
+  due_date: z.string().trim().default(""),
+  label: z.string().trim().max(200).default(""),
+});
+
+/**
+ * Crée une facture d'acompte ou de solde.
+ *
+ * Le montant proposé vient de `suggestedAmount`, mais le conseiller peut le
+ * corriger — un acompte se négocie. Ce qui ne se négocie pas : on ne facture
+ * pas plus que ce qui reste dû.
+ */
+export async function createInvoiceAction(
+  _previous: QuoteFormState,
+  formData: FormData,
+): Promise<QuoteFormState> {
+  const user = await requireUser();
+  assertAdvisor(user);
+
+  const parsed = invoiceSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Vérifiez les champs." };
+
+  const trip = getTrip(parsed.data.trip_id);
+  if (!trip || !membershipRole(user.id, parsed.data.trip_id)) {
+    return { error: "Ce dossier ne vous appartient pas." };
+  }
+  if (!user.agency_id) return { error: "Votre compte n'est rattaché à aucune agence." };
+
+  const bookings = listBookings(trip.id);
+  const margin = dossierMargin(trip, bookings);
+  const billing = billingFor(margin.sell_cents, listInvoices(trip.id));
+
+  if (margin.sell_cents <= 0) {
+    return { error: "Rien n'est vendu sur ce dossier : posez un prix de vente d'abord." };
+  }
+
+  const typed = parsed.data.amount === "" ? null : parseAmountToCents(parsed.data.amount);
+  if (parsed.data.amount !== "" && typed === null) {
+    return { error: "Le montant n'est pas lisible : 1 194 ou 1194,00." };
+  }
+  const amount = typed ?? billing.remaining_cents;
+
+  if (amount <= 0) return { error: "Le montant doit être supérieur à zéro." };
+  if (amount > billing.remaining_cents) {
+    return {
+      error: `Il ne reste que ${formatMoney(billing.remaining_cents, trip.currency)} à facturer sur ce dossier.`,
+    };
+  }
+
+  const invoice = createInvoice({
+    tripId: trip.id,
+    agencyId: user.agency_id,
+    quoteId: parsed.data.quote_id ?? null,
+    kind: parsed.data.kind,
+    label: parsed.data.label || trip.title,
+    totalCents: amount,
+    dueDate: parsed.data.due_date || null,
+  });
+
+  recordActivity({
+    tripId: trip.id,
+    actorId: user.id,
+    action: "invoice.created",
+    detail: invoice.reference,
+  });
+
+  revalidatePath(`/trips/${trip.id}/devis`);
+  return {};
+}
+
+export async function issueInvoiceAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  assertAdvisor(user);
+
+  const invoice = getInvoice(Number(formData.get("invoice_id")));
+  if (!invoice || invoice.agency_id !== user.agency_id) redirect("/trips");
+
+  issue(invoice.id);
+  recordActivity({
+    tripId: invoice.trip_id,
+    actorId: user.id,
+    action: "invoice.issued",
+    detail: invoice.reference,
+  });
+  revalidatePath(`/trips/${invoice.trip_id}/devis`);
+}
+
+export async function markInvoicePaidAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  assertAdvisor(user);
+
+  const invoice = getInvoice(Number(formData.get("invoice_id")));
+  if (!invoice || invoice.agency_id !== user.agency_id) redirect("/trips");
+
+  markPaid(invoice.id, String(formData.get("payment_note") ?? "").slice(0, 200));
+  recordActivity({
+    tripId: invoice.trip_id,
+    actorId: user.id,
+    action: "invoice.paid",
+    detail: invoice.reference,
+  });
+  revalidatePath(`/trips/${invoice.trip_id}/devis`);
+  revalidatePath("/marges");
+}
+
+export async function cancelInvoiceAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  assertAdvisor(user);
+
+  const invoice = getInvoice(Number(formData.get("invoice_id")));
+  if (!invoice || invoice.agency_id !== user.agency_id) redirect("/trips");
+
+  cancel(invoice.id);
+  revalidatePath(`/trips/${invoice.trip_id}/devis`);
 }

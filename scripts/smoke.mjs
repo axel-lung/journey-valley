@@ -380,6 +380,57 @@ try {
     await page.getByText(/Accepté par Sam Ortega/).isVisible(),
   );
 
+  // 6c. La facture : acompte, émission, règlement — et pas de TVA dessus.
+  await page.goto(`${tripUrl}/devis`);
+  await page.waitForSelector("text=Reste à facturer");
+  const invoiceForm = page.locator('form:has(input[name="due_date"])');
+  await invoiceForm.getByRole("button", { name: "Préparer la facture" }).click();
+  await page.waitForSelector("text=FAC-");
+  check("a deposit invoice is drafted from the accepted quote", await page.getByText(/FAC-\d{4}-0001/).isVisible());
+
+  await page.getByRole("button", { name: "Émettre" }).click();
+  await page.waitForSelector("text=Émise");
+  check("issuing the invoice freezes it", await page.getByText("Émise").first().isVisible());
+
+  const invoiceHref = await page.getByRole("link", { name: "Voir la facture" }).first().getAttribute("href");
+  const client = await browser.newPage();
+  await client.goto(`${BASE}${invoiceHref}`);
+  const invoiceText = await client.locator("body").innerText();
+  check(
+    "the invoice carries the margin-scheme mention, which is compulsory",
+    invoiceText.includes("Régime particulier – agences de voyages"),
+  );
+  check(
+    "the invoice never shows VAT, which the scheme forbids",
+    !/TVA\s*:/.test(invoiceText) && !invoiceText.includes("20 %"),
+    invoiceText.match(/.{0,40}(TVA\s*:|20 %).{0,40}/)?.[0] ?? "",
+  );
+  await client.close();
+
+  // Régler la facture alimente l'aide à la déclaration.
+  await page.goto(`${tripUrl}/devis`);
+  await page.locator('input[name="payment_note"]').fill("Virement du 12/03");
+  await page.getByRole("button", { name: "Marquer réglée" }).click();
+  await page.waitForSelector("text=Réglée le");
+  check("an invoice can be marked paid", await page.getByText(/Réglée le/).first().isVisible());
+
+  // Depuis la page, pas depuis le client HTTP : le cookie de session est
+  // `Secure`, et seul le navigateur l'envoie sur une origine locale en clair.
+  const csvResponse = await page.evaluate(async (url) => {
+    const response = await fetch(url, { credentials: "include" });
+    return { status: response.status, body: await response.text() };
+  }, `${BASE}/api/tva-marge`);
+  const csvBody = csvResponse.body;
+  check(
+    "the VAT export lists the paid invoice",
+    csvResponse.status === 200 && csvBody.includes("FAC-") && csvBody.includes("Base taxable"),
+    `status ${csvResponse.status} — ${csvBody.slice(0, 120)}`,
+  );
+  check(
+    "the VAT export says it is a working document, not a declaration",
+    csvBody.includes("à vérifier avec votre comptable"),
+  );
+
   // 7. La page Marges additionne les dossiers engagés.
   await page.goto(`${BASE}/marges`);
   check("the margins page lists the dossier", await page.getByText("Smoke test — Oslo").first().isVisible());

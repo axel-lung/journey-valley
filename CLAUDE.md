@@ -32,7 +32,15 @@ modifie.
    porte le sens, l'écran l'écrit.
 6. **Un devis envoyé est figé.** Ses lignes sont recopiées dans `quote_lines`,
    jamais relues depuis le dossier.
-7. **Les estimations ne sont pas des offres.** Le fournisseur hors ligne produit
+7. **La TVA ne figure jamais sur une facture client.** Sous le régime de la
+   marge, ne pas la mentionner est une condition d'application du régime, et la
+   mention « Régime particulier – agences de voyages » est obligatoire. La TVA
+   se calcule pour le conseiller (`vat.ts`) et s'exporte pour le comptable
+   (`vat-return.ts`) — jamais sur le document remis au client.
+8. **On ne facture pas plus que ce qui est vendu.** `billingFor` est la seule
+   source de « ce qui reste à facturer » ; une facture émise se gèle, une
+   facture annulée garde son numéro.
+9. **Les estimations ne sont pas des offres.** Le fournisseur hors ligne produit
    des ordres de grandeur ; chaque écran qui les montre le dit, et elles
    n'entrent jamais dans un prix de vente ni dans une alerte.
 
@@ -40,7 +48,10 @@ modifie.
 
 ```
 src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
-                  budget, stages, itinerary, format, practical, agency
+                  invoices, vat-return, budget, stages, itinerary, format,
+                  practical, agency
+                  (les modules *-store.ts portent les écritures ; le module pur
+                  reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
                   téléphone) ; live.ts porte le fetch côté serveur
 src/lib/db.ts     schéma, migrations additives via addColumn(), seed au premier
@@ -60,8 +71,8 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 153 tests unitaires
-npm run build && npm run smoke       # 48 vérifications web bout-en-bout
+npm run typecheck && npm test        # 162 tests unitaires
+npm run build && npm run smoke       # 55 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 19 vérifications sur le bundle Android
 ```
@@ -91,13 +102,17 @@ Mot de passe commun : `journey2026`.
   Java. En `http://`, le manifeste engendré autorise le clair — uniquement pour
   essayer sur un réseau privé.
 
+Déploiement : `DEPLOY.md` (VPS + Docker + Caddy). Le `Dockerfile` recompile
+better-sqlite3 dans la base de l'image finale ; la base vit sur un volume.
+
 ## Ce qui reste ouvert
 
 - Le texte des droits essentiels du formulaire standardisé a été rédigé d'après
   la directive (UE) 2015/2302, **pas recopié depuis l'arrêté du 1er mars 2018** :
   Légifrance est bloqué depuis cette machine. À confronter mot à mot avant toute
   vente réelle.
-- Pas de facture, pas d'encaissement, pas d'export comptable.
+- Pas d'encaissement : la facture suit l'acompte et le solde, l'agence encaisse
+  par ses propres moyens.
 - Pas d'invitation client en un clic : il s'inscrit, le conseiller l'ajoute.
 - Une seule agence par conseiller, pas de collègue à inviter.
 - Rien ne facture l'abonnement de l'agence.

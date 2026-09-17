@@ -24,7 +24,7 @@ export function TripTabs({
   const tabs = [
     { href: base, label: "Programme", count: counts.bookings },
     { href: `${base}/prix`, label: "Prix & marge", count: null },
-    { href: `${base}/devis`, label: "Devis", count: counts.quotes },
+    { href: `${base}/devis`, label: "Devis & factures", count: counts.quotes },
     { href: `${base}/voyageurs`, label: "Voyageurs", count: counts.travellers },
     { href: `${base}/destination`, label: "Destination", count: null },
   ];
