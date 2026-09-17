@@ -115,7 +115,9 @@ export function SearchPanel({
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {state.provider.live ? (
               <Badge className="bg-emerald-50 text-emerald-700 ring-emerald-200">
-                Offres réelles · {state.provider.label}
+                {(state.results ?? []).some((result) => result.price_known)
+                  ? `Offres réelles · ${state.provider.label}`
+                  : `Lieux réels · ${state.provider.label}, sans tarif`}
               </Badge>
             ) : (
               <Badge className="bg-amber-50 text-amber-800 ring-amber-200">
@@ -146,17 +148,38 @@ export function SearchPanel({
                 <div className="min-w-0">
                   <p className="font-medium text-stone-900">{result.vendor}</p>
                   <p className="text-xs text-stone-500">{result.description}</p>
-                  <p className="mt-0.5 text-xs text-stone-400">
-                    En formule, ce type de prestation se revend autour de{" "}
-                    {formatMoney(result.package_price_cents, currency)}
-                  </p>
+                  {result.price_known ? (
+                    <p className="mt-0.5 text-xs text-stone-400">
+                      En formule, ce type de prestation se revend autour de{" "}
+                      {formatMoney(result.package_price_cents, currency)}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-xs text-stone-400">
+                      Lieu réel, tarif non publié par la source
+                      {result.deeplink ? (
+                        <>
+                          {" · "}
+                          <a
+                            href={result.deeplink}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-brand-700 underline"
+                          >
+                            voir la fiche
+                          </a>
+                        </>
+                      ) : null}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <p className="tabular-nums text-stone-900">
-                    {formatMoney(result.price_cents, currency)}
-                  </p>
-                  <form action={importResultAction}>
+                  {result.price_known && (
+                    <p className="tabular-nums text-stone-900">
+                      {formatMoney(result.price_cents, currency)}
+                    </p>
+                  )}
+                  <form action={importResultAction} className="flex items-center gap-2">
                     <input type="hidden" name="trip_id" value={tripId} />
                     <input type="hidden" name="kind" value={result.kind} />
                     <input type="hidden" name="vendor" value={result.vendor} />
@@ -166,6 +189,15 @@ export function SearchPanel({
                     <input type="hidden" name="nights" value={result.nights ?? ""} />
                     <input type="hidden" name="price_cents" value={result.price_cents} />
                     <input type="hidden" name="source" value={result.source} />
+                    {!result.price_known && (
+                      <input
+                        name="price"
+                        inputMode="decimal"
+                        aria-label={`Prix pour ${result.vendor}`}
+                        placeholder={`Prix (${currency})`}
+                        className={`${inputClass} w-32`}
+                      />
+                    )}
                     <SubmitButton className={secondaryButtonClass} pendingLabel="Ajout…">
                       Ajouter
                     </SubmitButton>

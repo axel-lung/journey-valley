@@ -1,4 +1,3 @@
-import { cachedJson, fetchJson } from "./http";
 import type { Place } from "./geo";
 
 /**
@@ -8,6 +7,9 @@ import type { Place } from "./geo";
  * Two questions matter to someone planning a trip, and they need two different
  * endpoints: "what will it be like next week?" (forecast, 16 days out) and
  * "what is it like there in October?" (climate normals from past years).
+ *
+ * URLs and parsers only: the fetching lives in `api/live.ts` on the server and
+ * in `mobile/web/api.ts` on the phone, which share this file.
  */
 
 export interface DailyWeather {
@@ -90,36 +92,25 @@ export function withinForecastRange(startDate: string, now: Date = new Date()): 
   return days <= 14;
 }
 
-export async function weatherFor(
-  place: Place,
-  startDate: string,
-  endDate: string,
-): Promise<WeatherOutlook> {
-  if (withinForecastRange(startDate)) {
-    const url =
-      "https://api.open-meteo.com/v1/forecast?" +
-      new URLSearchParams({
-        latitude: String(place.latitude),
-        longitude: String(place.longitude),
-        daily: "temperature_2m_min,temperature_2m_max,precipitation_sum",
-        timezone: "auto",
-        start_date: startDate.slice(0, 10),
-        end_date: endDate.slice(0, 10),
-      });
+/** Same split as the other modules: URL here, transport at the call site. */
+export function forecastUrl(place: Place, startDate: string, endDate: string): string {
+  return (
+    "https://api.open-meteo.com/v1/forecast?" +
+    new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      daily: "temperature_2m_min,temperature_2m_max,precipitation_sum",
+      timezone: "auto",
+      start_date: startDate.slice(0, 10),
+      end_date: endDate.slice(0, 10),
+    })
+  );
+}
 
-    const { value } = await cachedJson(
-      `forecast:${place.latitude},${place.longitude}:${startDate}:${endDate}`,
-      6,
-      () => fetchJson<unknown>(url),
-    );
-    return summarise(parseDaily(value), "forecast", "Open-Meteo");
-  }
-
-  // Too far out for a forecast: same week last year stands in for the season.
-  const lastYear = (iso: string) =>
-    `${Number(iso.slice(0, 4)) - 1}${iso.slice(4, 10)}`;
-
-  const url =
+/** The same week a year ago, which is the best free stand-in for a season. */
+export function archiveUrl(place: Place, startDate: string, endDate: string): string {
+  const lastYear = (iso: string) => `${Number(iso.slice(0, 4)) - 1}${iso.slice(4, 10)}`;
+  return (
     "https://archive-api.open-meteo.com/v1/archive?" +
     new URLSearchParams({
       latitude: String(place.latitude),
@@ -128,12 +119,6 @@ export async function weatherFor(
       timezone: "auto",
       start_date: lastYear(startDate),
       end_date: lastYear(endDate),
-    });
-
-  const { value } = await cachedJson(
-    `normals:${place.latitude},${place.longitude}:${startDate.slice(5, 10)}`,
-    24 * 30,
-    () => fetchJson<unknown>(url),
+    })
   );
-  return summarise(parseDaily(value), "normals", "Open-Meteo (archive)");
 }

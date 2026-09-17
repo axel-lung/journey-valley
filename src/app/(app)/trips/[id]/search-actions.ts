@@ -87,7 +87,9 @@ const importSchema = z.object({
   start_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end_at: z.string().default(""),
   nights: z.string().default(""),
-  price_cents: z.coerce.number().int().positive(),
+  price_cents: z.coerce.number().int().min(0).default(0),
+  /** Typed by the traveller when the source knows the place but not its price. */
+  price: z.string().trim().max(20).default(""),
   source: z.string().trim().max(40).default("offline"),
 });
 
@@ -97,6 +99,10 @@ const importSchema = z.object({
  * The price is imported; the package estimate that sits beside it in the
  * results is not. An estimate must never end up in `agency_quote_cents`, or the
  * savings figures would quietly become guesses.
+ *
+ * OpenStreetMap knows the museum but not the ticket, so those results arrive
+ * with no price and the traveller types one in. Without it there is nothing to
+ * add: a booking at zero euro would quietly falsify the budget.
  */
 export async function importResultAction(formData: FormData): Promise<void> {
   const user = await requireUser();
@@ -106,6 +112,16 @@ export async function importResultAction(formData: FormData): Promise<void> {
 
   const trip = getTrip(parsed.data.trip_id);
   if (!trip || !membershipRole(user.id, parsed.data.trip_id)) redirect("/trips");
+
+  const typed = parsed.data.price === "" ? null : parseAmountToCents(parsed.data.price);
+  const amountCents = typed ?? parsed.data.price_cents;
+  if (amountCents <= 0) {
+    redirect(
+      `/trips/${trip.id}?error=${encodeURIComponent(
+        "Indiquez le prix de cette prestation avant de l'ajouter — la source ne le publie pas.",
+      )}`,
+    );
+  }
 
   getDb()
     .prepare(
@@ -120,7 +136,7 @@ export async function importResultAction(formData: FormData): Promise<void> {
       parsed.data.description,
       parsed.data.start_at,
       parsed.data.end_at || null,
-      parsed.data.price_cents,
+      amountCents,
       parsed.data.nights ? Number(parsed.data.nights) || null : null,
       user.id,
     );

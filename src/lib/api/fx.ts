@@ -1,4 +1,3 @@
-import { cachedJson, fetchJson } from "./http";
 import type { Currency } from "../money";
 
 /**
@@ -7,6 +6,9 @@ import type { Currency } from "../money";
  *
  * Rates are stored with the amount they converted, never re-applied later: a
  * trip's numbers must not move because the euro did.
+ *
+ * URLs and parsers only: the fetching lives in `api/live.ts` on the server and
+ * in `mobile/web/api.ts` on the phone, which share this file.
  */
 
 export interface RateSet {
@@ -52,9 +54,6 @@ export function convertCents(
   return Math.round((amountCents / toBase) * fromBase);
 }
 
-export async function ratesFor(base: Currency): Promise<RateSet | null> {
-  const url = `https://api.frankfurter.app/latest?${new URLSearchParams({ from: base })}`;
-  // One set a day is plenty: the ECB publishes once each working day.
-  const { value } = await cachedJson(`fx:${base}`, 12, () => fetchJson<unknown>(url));
-  return parseRates(value);
+export function ratesUrl(base: string): string {
+  return `https://api.frankfurter.app/latest?${new URLSearchParams({ from: base })}`;
 }

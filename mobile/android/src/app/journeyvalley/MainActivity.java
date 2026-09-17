@@ -30,6 +30,10 @@ public class MainActivity extends Activity {
 
     web.addJavascriptInterface(new Store(this), "JVStore");
     web.addJavascriptInterface(new Share(this), "JVShare");
+    // The network goes through Java, behind a host allowlist: a file:// page
+    // cannot fetch across origins, and opening the WebView up would be worse.
+    web.addJavascriptInterface(new Net(web), "JVNet");
+    web.addJavascriptInterface(new Printer(this, web), "JVPrint");
     web.loadUrl("file:///android_asset/index.html");
     setContentView(web);
   }

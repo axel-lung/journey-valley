@@ -4,7 +4,14 @@
     android:versionCode="1"
     android:versionName="0.1.0">
 
-  <!-- No permissions at all: the app never touches the network or your files. -->
+  <!--
+    The only permission, and only for the six free services listed in Net.java:
+    map data, weather, exchange rates and the destination write-up. Everything
+    else stays on the phone, and the app works with the permission refused.
+  -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
   <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="33" />
 
   <application

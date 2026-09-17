@@ -1,4 +1,3 @@
-import { cachedJson, fetchJson } from "./http";
 import type { Place } from "./geo";
 
 /**
@@ -8,6 +7,9 @@ import type { Place } from "./geo";
  * What OSM does not have is prices: it is a map, not a booking engine. So these
  * results come back with `price_known: false` and the interface asks for the
  * price rather than inventing one.
+ *
+ * URLs and parsers only: the fetching lives in `api/live.ts` on the server and
+ * in `mobile/web/api.ts` on the phone, which share this file.
  */
 
 const ENDPOINT = "https://overpass-api.de/api/interpreter";
@@ -93,7 +95,7 @@ export function parsePois(payload: unknown, limit = 8): PointOfInterest[] {
     .map(({ score: _score, ...poi }) => poi);
 }
 
-function buildQuery(place: Place, radiusMetres: number): string {
+export function buildQuery(place: Place, radiusMetres: number): string {
   const around = `around:${radiusMetres},${place.latitude},${place.longitude}`;
   const tourism = "museum|attraction|artwork|viewpoint|gallery|zoo|aquarium|theme_park";
 
@@ -107,16 +109,6 @@ function buildQuery(place: Place, radiusMetres: number): string {
 out center 60;`;
 }
 
-export async function poisAround(place: Place, radiusMetres = 6000): Promise<PointOfInterest[]> {
-  const query = buildQuery(place, radiusMetres);
-  const url = `${ENDPOINT}?${new URLSearchParams({ data: query })}`;
-
-  // Overpass is a shared volunteer service; a week of cache per city is polite
-  // and plenty, since museums do not move either.
-  const { value } = await cachedJson(
-    `pois:${place.latitude.toFixed(3)},${place.longitude.toFixed(3)}:${radiusMetres}`,
-    24 * 7,
-    () => fetchJson<unknown>(url, { timeoutMs: 25_000 }),
-  );
-  return parsePois(value);
+export function poisUrl(place: Place, radiusMetres = 6000): string {
+  return `${ENDPOINT}?${new URLSearchParams({ data: buildQuery(place, radiusMetres) })}`;
 }

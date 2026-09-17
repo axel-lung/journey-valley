@@ -124,15 +124,18 @@ you already have at it:
 
 ## On Android
 
-There is a standalone APK too — the same trips, budgets, agency comparison and cost splitting,
-running entirely on the phone with no account and no network:
+There is a standalone APK too — the whole product on the phone, with no account and no Journey
+Valley server: trips, budgets, search, price alerts, the destination file, the printable travel
+book, the agency comparison and cost splitting.
 
 ```bash
 npm run apk      # → mobile/dist/journey-valley.apk
 ```
 
-It shares the domain logic with this app rather than reimplementing it. See
-[`mobile/README.md`](mobile/README.md) for what it does and does not do.
+It shares the domain logic and the API parsers with this app rather than reimplementing them; only
+the transport differs, through a Java bridge that may reach six free services and nothing else, and
+that *Réglages → Réseau* switches off. See [`mobile/README.md`](mobile/README.md) for what it does
+and does not do.
 
 ## Checks
 
@@ -177,13 +180,15 @@ src/
   lib/                domain logic, database, auth
     search/           provider interface, offline estimates, Amadeus and OSM adapters
     api/              the free services: geocoding, POIs, weather, rates, guide
+                      (URLs and parsers per file; live.ts holds the fetching)
 scripts/smoke.mjs     end-to-end browser test
 ```
 
 ## Known gaps
 
 - No free key-less API exists for flight or hotel prices; those need Amadeus (free tier, keyed).
-  OpenStreetMap gives real activities but no prices, so they import with the price left blank.
+  OpenStreetMap gives real activities but no prices, so importing one asks for the price rather
+  than recording a booking at zero.
 - The live integrations (Nominatim, Overpass, Open-Meteo, Frankfurter, Wikipedia) have never run
   against the real services from here — the sandbox has no outbound network. Their parsers are
   covered by fixtures; the first live call is worth watching.
@@ -192,6 +197,8 @@ scripts/smoke.mjs     end-to-end browser test
 - The Amadeus adapter is unverified against the live service, and covers flights only: stays and
   activities always fall back to the offline estimates.
 - Price alerts notify inside the app only — they land in the trip's activity feed, not in an inbox.
+  On Android they are checked when the traveller taps *Vérifier*: background polling would need a
+  foreground service, which this build does not ship.
 
 - Plan changes flip immediately; a real deployment would go through a payment provider and switch
   the plan on a confirmed webhook.

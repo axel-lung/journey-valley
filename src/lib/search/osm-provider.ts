@@ -1,5 +1,4 @@
-import { geocode } from "../api/geo";
-import { poisAround } from "../api/poi";
+import { geocode, poisAround } from "../api/live";
 import { SearchUnavailableError, type SearchProvider, type SearchQuery, type SearchResult } from "./types";
 
 /**

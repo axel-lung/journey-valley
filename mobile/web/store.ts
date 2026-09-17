@@ -36,6 +36,22 @@ export interface LocalChecklistItem {
   position: number;
 }
 
+export interface LocalWatch {
+  id: number;
+  trip_id: number;
+  kind: "flight" | "stay" | "activity";
+  origin: string | null;
+  destination: string;
+  start_date: string;
+  end_date: string | null;
+  travellers: number;
+  target_cents: number;
+  last_price_cents: number | null;
+  best_price_cents: number | null;
+  last_checked_at: string | null;
+  created_at: string;
+}
+
 export interface Database {
   version: 1;
   next_id: number;
@@ -44,6 +60,10 @@ export interface Database {
   bookings: Booking[];
   expenses: Expense[];
   checklist: LocalChecklistItem[];
+  watches?: LocalWatch[];
+  /** Answers from the free services, so the destination file survives a plane. */
+  cache?: Record<string, { payload: string; expires_at: number }>;
+  settings?: { network?: boolean };
 }
 
 declare global {
@@ -89,8 +109,14 @@ function load(): Database {
   try {
     const parsed = JSON.parse(raw) as Database;
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.trips)) return seed();
-    // The checklist arrived after the first release; older documents lack it.
-    return { ...parsed, checklist: parsed.checklist ?? [] };
+    // Fields added after a release: an older document simply lacks them.
+    return {
+      ...parsed,
+      checklist: parsed.checklist ?? [],
+      watches: parsed.watches ?? [],
+      cache: parsed.cache ?? {},
+      settings: parsed.settings ?? {},
+    };
   } catch {
     return seed();
   }
@@ -118,7 +144,58 @@ export function clearAll(): void {
     bookings: [],
     expenses: [],
     checklist: [],
+    watches: [],
+    // The settings are the user's, not the demo data's: they survive a reset.
+    cache: db.cache ?? {},
+    settings: db.settings ?? {},
   };
+  persist();
+}
+
+/** Lets other modules (the network cache) write through the same document. */
+export function persistNow(): void {
+  persist();
+}
+
+/** Drops the stored answers from the free services; the trips stay untouched. */
+export function clearCache(): void {
+  db.cache = {};
+  persist();
+}
+
+/* ------------------------------------------------------------ price alerts */
+
+export function listWatches(tripId: number): LocalWatch[] {
+  return (db.watches ?? []).filter((watch) => watch.trip_id === tripId);
+}
+
+export function addWatch(input: Omit<LocalWatch, "id" | "created_at" | "last_price_cents" | "best_price_cents" | "last_checked_at">): void {
+  db.watches ??= [];
+  db.watches.push({
+    ...input,
+    id: id(),
+    last_price_cents: null,
+    best_price_cents: null,
+    last_checked_at: null,
+    created_at: today(),
+  });
+  persist();
+}
+
+export function deleteWatch(watchId: number): void {
+  db.watches = (db.watches ?? []).filter((watch) => watch.id !== watchId);
+  persist();
+}
+
+/** Records what a check found, keeping the best price ever seen. */
+export function recordWatchPrice(watchId: number, priceCents: number): void {
+  const watch = (db.watches ?? []).find((entry) => entry.id === watchId);
+  if (!watch) return;
+
+  watch.last_price_cents = priceCents;
+  watch.best_price_cents =
+    watch.best_price_cents === null ? priceCents : Math.min(watch.best_price_cents, priceCents);
+  watch.last_checked_at = new Date().toISOString();
   persist();
 }
 
@@ -238,6 +315,7 @@ export function deleteChecklistItem(itemId: number): void {
 export function deleteTrip(tripId: number): void {
   db.trips = db.trips.filter((trip) => trip.id !== tripId);
   db.checklist = db.checklist.filter((item) => item.trip_id !== tripId);
+  db.watches = (db.watches ?? []).filter((watch) => watch.trip_id !== tripId);
   db.travellers = db.travellers.filter((traveller) => traveller.trip_id !== tripId);
   db.bookings = db.bookings.filter((booking) => booking.trip_id !== tripId);
   db.expenses = db.expenses.filter((expense) => expense.trip_id !== tripId);
@@ -365,6 +443,9 @@ function seed(): Database {
     bookings: [],
     expenses: [],
     checklist: [],
+    watches: [],
+    cache: db?.cache ?? {},
+    settings: db?.settings ?? {},
   };
   db = fresh;
 

@@ -1,9 +1,11 @@
-import { cachedJson, fetchJson } from "./http";
 
 /**
  * The destination write-up, from Wikipedia's REST summary endpoint — free, no
  * key, and CC BY-SA, which is why the attribution and the link travel with the
  * text everywhere it is shown.
+ *
+ * URLs and parsers only: the fetching lives in `api/live.ts` on the server and
+ * in `mobile/web/api.ts` on the phone, which share this file.
  */
 
 export interface DestinationGuide {
@@ -34,13 +36,6 @@ export function parseGuide(payload: unknown): DestinationGuide | null {
   };
 }
 
-export async function guideFor(city: string): Promise<DestinationGuide | null> {
-  const title = city.trim();
-  if (!title) return null;
-
-  const url = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-  const { value } = await cachedJson(`guide:${title.toLowerCase()}`, 24 * 30, () =>
-    fetchJson<unknown>(url),
-  );
-  return parseGuide(value);
+export function guideUrl(city: string): string {
+  return `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(city.trim())}`;
 }

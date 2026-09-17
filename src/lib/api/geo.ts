@@ -1,11 +1,13 @@
-import { cachedJson, fetchJson } from "./http";
 
 /**
  * Place lookup through Nominatim (OpenStreetMap) — free, no key, no account.
  *
  * Their usage policy asks for an identifying User-Agent, at most one call per
- * second, and that results be cached. `fetchJson` sets the agent and
- * `cachedJson` keeps a place for a month: a city's coordinates do not move.
+ * second, and that results be cached — which the two callers honour:
+ * `api/live.ts` on the server, `mobile/web/api.ts` on the phone.
+ *
+ * This module holds only the URL and the parser, with no transport and no
+ * database, so the Android bundle can import it as-is.
  */
 
 export interface Place {
@@ -44,22 +46,16 @@ export function parsePlace(payload: unknown, fallbackName: string): Place | null
   };
 }
 
-export async function geocode(place: string): Promise<Place | null> {
-  const query = place.trim();
-  if (!query) return null;
-
-  const url =
+/** The request, separated from the transport: the Android build reuses it. */
+export function geocodeUrl(place: string): string {
+  return (
     "https://nominatim.openstreetmap.org/search?" +
     new URLSearchParams({
-      q: query,
+      q: place.trim(),
       format: "jsonv2",
       addressdetails: "1",
       limit: "1",
       "accept-language": "fr",
-    });
-
-  const { value } = await cachedJson(`geocode:${query.toLowerCase()}`, 24 * 30, () =>
-    fetchJson<unknown>(url),
+    })
   );
-  return parsePlace(value, query);
 }

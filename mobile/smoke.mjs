@@ -108,6 +108,81 @@ try {
     await page.getByText("NOK").first().isVisible(),
   );
 
+  // 4d. Search, embedded in the app. With no booking provider connected the
+  // estimator answers, and the screen has to say so rather than pass computed
+  // figures off as offers.
+  const search = page.locator("form").filter({ hasText: "Départ de" });
+  await search.locator('input[name="origin"]').fill("Lyon");
+  await search.getByRole("button", { name: "Chercher" }).click();
+  await page.waitForSelector("text=Estimations, pas des offres réservables");
+  check(
+    "a flight search answers inside the app",
+    await page.getByText("Estimations, pas des offres réservables").isVisible(),
+  );
+  check(
+    "the estimates are not sold as bookable offers",
+    await page.getByText(/Aucun fournisseur de réservation n'est connecté/).isVisible(),
+  );
+
+  // 4e. A result becomes a booking on the trip.
+  const bookingsBefore = await page.getByText(/^Réservations \(\d+\)$/).innerText();
+  await page.getByRole("button", { name: "Ajouter au voyage" }).first().click();
+  await page.waitForSelector("text=Ajouté ✓");
+  const bookingsAfter = await page.getByText(/^Réservations \(\d+\)$/).innerText();
+  check("a search result is imported as a booking", bookingsBefore !== bookingsAfter,
+    `${bookingsBefore} → ${bookingsAfter}`);
+
+  // 4f. A price alert, checked on demand and remembered.
+  await search.locator('input[name="target"]').fill("400");
+  await search.getByRole("button", { name: "Surveiller" }).click();
+  await page.waitForSelector("text=Alertes prix (1)");
+  check("a price alert is created", await page.getByText("Alertes prix (1)").isVisible());
+  check("a new alert has never been checked", await page.getByText("Jamais vérifiée").isVisible());
+
+  await page.getByRole("button", { name: "Vérifier" }).click();
+  await page.waitForSelector("text=Dernier prix");
+  check(
+    "checking an alert records a price",
+    await page.getByText(/Dernier prix .* · meilleur /).isVisible(),
+  );
+
+  // 4g. Switching the network off leaves the app usable and honest about it.
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await page.getByRole("checkbox").uncheck();
+  check(
+    "the network can be switched off",
+    (await page.getByText(/ne contacte plus rien/).count()) === 1,
+  );
+  await page.getByRole("button", { name: "Voyages" }).click();
+  await page.getByText("Road trip dans les fjords norvégiens").click();
+  await page.getByRole("button", { name: "Charger la fiche" }).click();
+  await page.waitForSelector("text=L'accès réseau est désactivé dans les réglages");
+  check(
+    "the destination file says why it is empty offline",
+    await page.getByText("L'accès réseau est désactivé dans les réglages").isVisible(),
+  );
+
+  // 4h. The travel book, printable from the phone.
+  await page.getByRole("button", { name: "Ouvrir le carnet de voyage" }).click();
+  await page.waitForSelector("text=Carnet de voyage");
+  check("the travel book opens", await page.getByText("Le programme").isVisible());
+  check(
+    "the travel book carries the practical page",
+    await page.getByText("En cas de pépin").isVisible(),
+  );
+  check(
+    "the travel book can be printed or saved as a PDF",
+    await page.getByRole("button", { name: "Imprimer / PDF" }).isVisible(),
+  );
+  await page.getByText("← Retour au voyage").click();
+  await page.waitForSelector("text=Ouvrir le carnet de voyage");
+
+  // Back on, so the rest of the run is unaffected.
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Voyages" }).click();
+  await page.getByText("Road trip dans les fjords norvégiens").click();
+
   // 5. It survives a restart — which is the whole point of the storage layer.
   await page.reload();
   await page.waitForSelector("text=Road trip dans les fjords norvégiens");

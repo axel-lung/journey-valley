@@ -1,10 +1,15 @@
 /**
- * Journey Valley pour Android — version hors-ligne.
+ * Journey Valley pour Android.
  *
- * Même produit, un seul appareil : préparer ses voyages, noter ce qu'on a payé
- * face au devis d'une agence, partager les frais avec ceux qui viennent. Les
- * calculs viennent des modules partagés `budget.ts` et `stages.ts`, pour que le
- * téléphone et le site ne puissent jamais donner deux chiffres différents.
+ * Même produit qu'en ligne, un seul appareil : préparer ses voyages, chercher
+ * vols, logements et activités, surveiller les prix, lire la fiche destination,
+ * imprimer son carnet, noter ce qu'on a payé face au devis d'une agence et
+ * partager les frais avec ceux qui viennent.
+ *
+ * Les calculs viennent des modules partagés (`budget.ts`, `stages.ts`,
+ * `watch.ts`, les parseurs d'API), pour que le téléphone et le site ne puissent
+ * jamais donner deux chiffres différents. Tout fonctionne sans réseau ; ce qui
+ * en a besoin le dit, et se souvient de sa dernière réponse.
  */
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -39,7 +44,11 @@ import {
   STAGE_LABEL,
   type StageAction,
 } from "../../src/lib/stages";
-import type { BookingType, ExpenseCategory, TripStage } from "../../src/lib/types";
+import type { BookingType, ExpenseCategory, Trip, TripStage } from "../../src/lib/types";
+import { describeWatch } from "../../src/lib/watch";
+import type { SearchKind, SearchQuery, SearchResult } from "../../src/lib/search/types";
+import { buildDossier, checkWatch, search, type MobileDossier, type MobileSearchOutcome } from "./api";
+import { networkAllowed, printPage, setNetworkAllowed } from "./net";
 import * as store from "./store";
 
 const CURRENCY = store.CURRENCY;
@@ -73,6 +82,7 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
 type Screen =
   | { name: "trips" }
   | { name: "trip"; id: number }
+  | { name: "carnet"; id: number }
   | { name: "new" }
   | { name: "savings" }
   | { name: "settings" };
@@ -83,11 +93,13 @@ function App() {
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision((value) => value + 1);
 
-  // Android's back button: step back inside the app before leaving it.
+  // Android's back button: step back inside the app before leaving it. The
+  // travel book goes back to its trip, not to the list — that is where you came
+  // from.
   useEffect(() => {
     window.JVBack = () => {
       if (screen.name === "trips") return false;
-      setScreen({ name: "trips" });
+      setScreen(screen.name === "carnet" ? { name: "trip", id: screen.id } : { name: "trips" });
       return true;
     };
     return () => {
@@ -106,6 +118,15 @@ function App() {
             revision={revision}
             refresh={refresh}
             onBack={() => setScreen({ name: "trips" })}
+            onCarnet={() => setScreen({ name: "carnet", id: screen.id })}
+          />
+        );
+      case "carnet":
+        return (
+          <CarnetScreen
+            tripId={screen.id}
+            revision={revision}
+            onBack={() => setScreen({ name: "trip", id: screen.id })}
           />
         );
       case "new":
@@ -134,7 +155,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-stone-50">
-      <header className="sticky top-0 z-20 flex items-center gap-2.5 bg-brand-700 px-4 py-3.5 text-white shadow-sm">
+      <header className="sticky top-0 z-20 flex items-center gap-2.5 bg-brand-700 px-4 py-3.5 text-white shadow-sm print:hidden">
         <span aria-hidden className="grid h-8 w-8 place-items-center rounded-xl bg-white/20 text-base">
           ◇
         </span>
@@ -150,9 +171,9 @@ function App() {
         )}
       </header>
 
-      <main className="flex-1 px-4 pb-24 pt-4">{body}</main>
+      <main className="flex-1 px-4 pb-24 pt-4 print:p-0">{body}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)] print:hidden">
         {(
           [
             { key: "trips", label: "Voyages", icon: "✈" },
@@ -160,7 +181,9 @@ function App() {
             { key: "settings", label: "Réglages", icon: "⚙" },
           ] as const
         ).map((tab) => {
-          const active = screen.name === tab.key || (tab.key === "trips" && screen.name === "trip");
+          const active =
+            screen.name === tab.key ||
+            (tab.key === "trips" && (screen.name === "trip" || screen.name === "carnet"));
           return (
             <button
               key={tab.key}
@@ -281,11 +304,13 @@ function TripScreen({
   revision,
   refresh,
   onBack,
+  onCarnet,
 }: {
   tripId: number;
   revision: number;
   refresh: () => void;
   onBack: () => void;
+  onCarnet: () => void;
 }) {
   const trip = useMemo(() => store.getTrip(tripId), [tripId, revision]);
   const [error, setError] = useState<string | null>(null);
@@ -298,6 +323,7 @@ function TripScreen({
   const bookings = store.listBookings(tripId);
   const expenses = store.listExpenses(tripId);
   const checklist = store.listChecklist(tripId);
+  const watches = store.listWatches(tripId);
   const budget = budgetStatus(trip, bookings, expenses);
   const savings = savingsSummary(trip, bookings);
   const balances = splitBalances(travellers, expenses);
@@ -508,6 +534,12 @@ function TripScreen({
           </div>
         </Card>
       )}
+
+      <SearchCard trip={trip} travellers={travellers.length} refresh={refresh} />
+
+      <WatchesCard watches={watches} refresh={refresh} />
+
+      <DossierCard trip={trip} />
 
       {(bookings.length > 0 || expenses.length > 0) && (
         <Card title="Jour par jour">
@@ -766,6 +798,14 @@ function TripScreen({
 
       <button
         type="button"
+        onClick={onCarnet}
+        className="w-full rounded-xl border border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-stone-700 active:bg-stone-100"
+      >
+        Ouvrir le carnet de voyage
+      </button>
+
+      <button
+        type="button"
         onClick={() => {
           if (confirm(`Supprimer « ${trip.title} » et tout ce qu'il contient ?`)) {
             store.deleteTrip(trip.id);
@@ -876,6 +916,797 @@ function ChecklistCard({
         </button>
       </form>
     </Card>
+  );
+}
+
+/* ------------------------------------------------- recherche et alertes */
+
+const SEARCH_KINDS: Array<{ value: SearchKind; label: string }> = [
+  { value: "flight", label: "Vol" },
+  { value: "stay", label: "Logement" },
+  { value: "activity", label: "Activité" },
+];
+
+/**
+ * Chercher un vol, un logement ou une activité, ajouter ce qu'on retient au
+ * voyage, et poser une alerte sur le prix — sans quitter l'application.
+ *
+ * Les activités viennent d'OpenStreetMap : des lieux réels, sans tarif, donc on
+ * demande le prix plutôt que d'en inventer un. Les vols et les logements sont
+ * des estimations tant qu'aucun fournisseur n'est branché, et l'écran le dit.
+ */
+function SearchCard({
+  trip,
+  travellers,
+  refresh,
+}: {
+  trip: Trip;
+  travellers: number;
+  refresh: () => void;
+}) {
+  const [kind, setKind] = useState<SearchKind>("flight");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<MobileSearchOutcome | null>(null);
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [added, setAdded] = useState<string[]>([]);
+
+  /** Reads the form, or returns the message to show instead. */
+  function readQuery(form: HTMLFormElement): SearchQuery | string {
+    const data = new FormData(form);
+    const read = (key: string) => String(data.get(key) ?? "").trim();
+
+    const destination = read("destination");
+    if (!destination) return "Vous cherchez où ?";
+
+    return {
+      kind,
+      origin: kind === "flight" ? read("origin") || undefined : undefined,
+      destination,
+      country: trip.destination_country || undefined,
+      start_date: read("start_date") || trip.start_date,
+      end_date: kind === "activity" ? undefined : read("end_date") || trip.end_date,
+      travellers: Math.max(1, Number(read("travellers")) || travellers),
+    };
+  }
+
+  async function runSearch(form: HTMLFormElement) {
+    const query = readQuery(form);
+    if (typeof query === "string") return setError(query);
+
+    setError(null);
+    setNotice(null);
+    setAdded([]);
+    setBusy(true);
+    try {
+      setOutcome(await search(query));
+    } catch (failure) {
+      setOutcome(null);
+      setError(failure instanceof Error ? failure.message : "La recherche n'a pas abouti.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function createWatch(form: HTMLFormElement) {
+    const query = readQuery(form);
+    if (typeof query === "string") return setError(query);
+
+    const raw = String(new FormData(form).get("target") ?? "").trim();
+    const target = raw === "" ? 0 : parseAmountToCents(raw);
+    if (target === null) return setError("Le prix cible n'est pas un montant lisible.");
+
+    store.addWatch({
+      trip_id: trip.id,
+      kind: query.kind,
+      origin: query.origin ?? null,
+      destination: query.destination,
+      start_date: query.start_date,
+      end_date: query.end_date ?? null,
+      travellers: query.travellers,
+      target_cents: target,
+    });
+    setError(null);
+    setNotice("Alerte créée : elle apparaît juste en dessous.");
+    refresh();
+  }
+
+  function importResult(result: SearchResult) {
+    const amount = result.price_known
+      ? result.price_cents
+      : parseAmountToCents(prices[result.id] ?? "");
+
+    if (amount === null || amount <= 0) {
+      return setError("Indiquez le prix de cette prestation — la source ne le publie pas.");
+    }
+
+    store.addBooking({
+      trip_id: trip.id,
+      type: result.kind,
+      vendor: result.vendor,
+      description: result.description,
+      start_at: result.start_at,
+      end_at: result.end_at,
+      amount_cents: amount,
+      // Une estimation n'est pas un devis : elle ne doit jamais gonfler les
+      // économies affichées.
+      agency_quote_cents: 0,
+      nights: result.nights,
+    });
+    setError(null);
+    setAdded((current) => [...current, result.id]);
+    refresh();
+  }
+
+  const results = outcome?.results ?? [];
+  const priced = results.some((result) => result.price_known);
+
+  return (
+    <Card title="Chercher et réserver">
+      <form
+        className="space-y-3 px-4 py-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void runSearch(event.currentTarget);
+        }}
+      >
+        <div className="flex gap-2">
+          {SEARCH_KINDS.map((entry) => (
+            <button
+              key={entry.value}
+              type="button"
+              onClick={() => {
+                setKind(entry.value);
+                setOutcome(null);
+              }}
+              className={`flex-1 rounded-full px-3 py-2 text-sm font-medium ring-1 ring-inset ${
+                kind === entry.value
+                  ? "bg-brand-600 text-white ring-brand-600"
+                  : "bg-white text-stone-600 ring-stone-300"
+              }`}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+
+        {kind === "flight" && (
+          <Field label="Départ de">
+            <input name="origin" placeholder="Lyon" className={inputClass} />
+          </Field>
+        )}
+
+        <Field label="Destination">
+          <input
+            name="destination"
+            defaultValue={trip.destination_city}
+            className={inputClass}
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={kind === "activity" ? "Quand" : "Aller"}>
+            <input
+              name="start_date"
+              type="date"
+              defaultValue={trip.start_date}
+              className={inputClass}
+            />
+          </Field>
+          {kind === "activity" ? (
+            <Field label="Voyageurs">
+              <input
+                name="travellers"
+                type="number"
+                min={1}
+                max={20}
+                defaultValue={travellers}
+                className={inputClass}
+              />
+            </Field>
+          ) : (
+            <Field label="Retour">
+              <input
+                name="end_date"
+                type="date"
+                defaultValue={trip.end_date}
+                className={inputClass}
+              />
+            </Field>
+          )}
+        </div>
+
+        {kind !== "activity" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Voyageurs">
+              <input
+                name="travellers"
+                type="number"
+                min={1}
+                max={20}
+                defaultValue={travellers}
+                className={inputClass}
+              />
+            </Field>
+            <Field label={`Prévenez-moi sous (${CURRENCY})`}>
+              <input name="target" inputMode="decimal" placeholder="250" className={inputClass} />
+            </Field>
+          </div>
+        )}
+        {kind === "activity" && (
+          <Field label={`Prévenez-moi sous (${CURRENCY})`} hint="Facultatif.">
+            <input name="target" inputMode="decimal" placeholder="40" className={inputClass} />
+          </Field>
+        )}
+
+        {error && <p className="text-sm text-rose-700">{error}</p>}
+        {notice && <p className="text-sm text-emerald-700">{notice}</p>}
+
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={busy}
+            className="flex-1 rounded-xl bg-brand-600 px-3 py-3 text-sm font-semibold text-white active:bg-brand-700 disabled:opacity-60"
+          >
+            {busy ? "Recherche…" : "Chercher"}
+          </button>
+          <button
+            type="button"
+            onClick={(event) => createWatch(event.currentTarget.form!)}
+            className="rounded-xl border border-stone-300 bg-white px-3 py-3 text-sm font-semibold text-stone-700 active:bg-stone-100"
+          >
+            Surveiller
+          </button>
+        </div>
+      </form>
+
+      {outcome && (
+        <div className="border-t border-stone-100">
+          <div className="px-4 pt-3">
+            <Pill
+              className={
+                outcome.source === "openstreetmap"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-amber-100 text-amber-800"
+              }
+            >
+              {outcome.source === "openstreetmap"
+                ? "Lieux réels · OpenStreetMap, sans tarif"
+                : "Estimations, pas des offres réservables"}
+            </Pill>
+
+            {outcome.source === "offline" && (
+              <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
+                Aucun fournisseur de réservation n'est connecté : ces prix sont des ordres de
+                grandeur calculés à partir de votre recherche. Utiles pour bâtir un budget, ils ne
+                correspondent à aucune offre.
+                {outcome.note ? ` (${outcome.note})` : ""}
+              </p>
+            )}
+            {outcome.source === "openstreetmap" && !priced && (
+              <p className="mt-2 text-xs leading-relaxed text-stone-500">
+                OpenStreetMap est une carte, pas une billetterie : elle connaît le lieu, pas le prix
+                d'entrée. Saisissez-le pour l'ajouter au voyage.
+              </p>
+            )}
+          </div>
+
+          {results.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-stone-500">Rien trouvé pour cette recherche.</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-stone-100">
+              {results.map((result) => (
+                <li key={result.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-stone-900">{result.vendor}</p>
+                      <p className="text-xs text-stone-500">{result.description}</p>
+                      {result.price_known ? (
+                        <p className="mt-0.5 text-xs text-stone-400">
+                          En formule, ce type de prestation se revend autour de{" "}
+                          {formatMoney(result.package_price_cents, CURRENCY)}
+                        </p>
+                      ) : (
+                        result.deeplink && (
+                          <a
+                            href={result.deeplink}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="mt-0.5 inline-block text-xs text-brand-700 underline"
+                          >
+                            Voir la fiche
+                          </a>
+                        )
+                      )}
+                    </div>
+                    {result.price_known && (
+                      <p className="shrink-0 tabular-nums text-stone-900">
+                        {formatMoney(result.price_cents, CURRENCY)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex gap-2">
+                    {!result.price_known && (
+                      <input
+                        inputMode="decimal"
+                        aria-label={`Prix pour ${result.vendor}`}
+                        placeholder={`Prix (${CURRENCY})`}
+                        value={prices[result.id] ?? ""}
+                        onChange={(event) =>
+                          setPrices((current) => ({
+                            ...current,
+                            [result.id]: event.target.value,
+                          }))
+                        }
+                        className={`${inputClass} flex-1`}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => importResult(result)}
+                      disabled={added.includes(result.id)}
+                      className="rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100 disabled:text-stone-400"
+                    >
+                      {added.includes(result.id) ? "Ajouté ✓" : "Ajouter au voyage"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Les alertes prix. Android ne laisse pas une application dormante interroger
+ * le réseau en continu sans un service en arrière-plan ; ici, la vérification
+ * est déclenchée par le voyageur, et l'application garde l'historique pour dire
+ * si ça a baissé depuis la dernière fois.
+ */
+function WatchesCard({ watches, refresh }: { watches: store.LocalWatch[]; refresh: () => void }) {
+  const [busy, setBusy] = useState<number | "all" | null>(null);
+  const [news, setNews] = useState<Record<number, string>>({});
+
+  async function run(watch: store.LocalWatch) {
+    setBusy(watch.id);
+    try {
+      const evaluation = await checkWatch(watch);
+      setNews((current) => ({ ...current, [watch.id]: describeEvaluation(evaluation) }));
+    } catch (failure) {
+      setNews((current) => ({
+        ...current,
+        [watch.id]: failure instanceof Error ? failure.message : "Vérification impossible.",
+      }));
+    } finally {
+      setBusy(null);
+      refresh();
+    }
+  }
+
+  async function runAll() {
+    setBusy("all");
+    for (const watch of watches) {
+      try {
+        const evaluation = await checkWatch(watch);
+        setNews((current) => ({ ...current, [watch.id]: describeEvaluation(evaluation) }));
+      } catch {
+        setNews((current) => ({ ...current, [watch.id]: "Vérification impossible." }));
+      }
+    }
+    setBusy(null);
+    refresh();
+  }
+
+  if (watches.length === 0) return null;
+
+  return (
+    <Card title={`Alertes prix (${watches.length})`}>
+      <ul className="divide-y divide-stone-100">
+        {watches.map((watch) => (
+          <li key={watch.id} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-medium text-stone-900">{describeWatch(watch)}</p>
+                <p className="text-xs text-stone-500">
+                  {formatDate(watch.start_date)}
+                  {watch.target_cents > 0
+                    ? ` · cible ${formatMoney(watch.target_cents, CURRENCY)}`
+                    : " · suivi simple"}
+                </p>
+                <p className="text-xs text-stone-400">
+                  {watch.last_price_cents === null
+                    ? "Jamais vérifiée"
+                    : `Dernier prix ${formatMoney(watch.last_price_cents, CURRENCY)} · meilleur ${formatMoney(
+                        watch.best_price_cents ?? watch.last_price_cents,
+                        CURRENCY,
+                      )}`}
+                </p>
+                {news[watch.id] && (
+                  <p className="mt-1 text-xs font-medium text-brand-700">{news[watch.id]}</p>
+                )}
+              </div>
+              <div className="shrink-0 space-y-1 text-right">
+                <button
+                  type="button"
+                  onClick={() => void run(watch)}
+                  disabled={busy !== null}
+                  className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 active:bg-stone-100 disabled:opacity-60"
+                >
+                  {busy === watch.id ? "…" : "Vérifier"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    store.deleteWatch(watch.id);
+                    refresh();
+                  }}
+                  className="block w-full text-xs text-stone-400"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {watches.length > 1 && (
+        <div className="border-t border-stone-100 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => void runAll()}
+            disabled={busy !== null}
+            className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100 disabled:opacity-60"
+          >
+            {busy === "all" ? "Vérification…" : "Tout vérifier"}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function describeEvaluation(evaluation: {
+  best_price_cents: number | null;
+  dropped: boolean;
+  drop_cents: number;
+  target_reached: boolean;
+}): string {
+  if (evaluation.best_price_cents === null) return "Aucun prix exploitable pour l'instant.";
+
+  const price = formatMoney(evaluation.best_price_cents, CURRENCY);
+  if (evaluation.target_reached) return `🎯 ${price} — sous votre prix cible.`;
+  if (evaluation.dropped) {
+    return `↓ ${price} — ${formatMoney(evaluation.drop_cents, CURRENCY)} de moins qu'avant.`;
+  }
+  return `${price} — rien de neuf.`;
+}
+
+/* --------------------------------------------------- fiche destination */
+
+/**
+ * La fiche que remettrait une agence : où c'est, le temps qu'il y fait à ces
+ * dates, ce que vaut l'euro sur place, ce qu'il y a à voir. Chargée à la
+ * demande, parce que le forfait data du voyageur lui appartient — et gardée en
+ * cache pour être encore lisible dans l'avion.
+ */
+function DossierCard({ trip }: { trip: Trip }) {
+  const [busy, setBusy] = useState(false);
+  const [dossier, setDossier] = useState<MobileDossier | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Une nouvelle destination, une nouvelle fiche.
+  useEffect(() => {
+    setDossier(null);
+    setError(null);
+  }, [trip.id]);
+
+  async function load() {
+    setBusy(true);
+    setError(null);
+    try {
+      setDossier(await buildDossier(trip));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Fiche indisponible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Fiche destination">
+      {!dossier ? (
+        <div className="space-y-3 px-4 py-4 text-center">
+          <p className="text-sm text-stone-500">
+            Météo, taux de change, présentation et lieux à voir — depuis des services libres et
+            gratuits (Open-Meteo, Frankfurter, Wikipédia, OpenStreetMap).
+          </p>
+          {error && <p className="text-sm text-rose-700">{error}</p>}
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={busy}
+            className="rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100 disabled:opacity-60"
+          >
+            {busy ? "Chargement…" : "Charger la fiche"}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 px-4 py-3 text-sm">
+          {dossier.offline && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              L'accès réseau est désactivé dans les réglages : seule la page pratique est
+              disponible.
+            </p>
+          )}
+
+          {dossier.place && (
+            <p className="text-stone-600">
+              {dossier.place.name}
+              {dossier.place.country ? `, ${dossier.place.country}` : ""} ·{" "}
+              {dossier.place.latitude.toFixed(2)}, {dossier.place.longitude.toFixed(2)}
+            </p>
+          )}
+
+          {dossier.weather && (
+            <div className="rounded-xl bg-stone-50 px-3 py-2.5">
+              <p className="font-medium text-stone-900">
+                {dossier.weather.average_min_c} – {dossier.weather.average_max_c} °C
+              </p>
+              <p className="text-xs text-stone-500">
+                {dossier.weather.kind === "forecast"
+                  ? "Prévisions pour vos dates"
+                  : "Moyennes des années passées, à la même période"}{" "}
+                · {dossier.weather.rainy_days} jour
+                {dossier.weather.rainy_days > 1 ? "s" : ""} de pluie · {dossier.weather.source}
+              </p>
+            </div>
+          )}
+
+          {dossier.exchange && (
+            <p className="text-stone-700">
+              1 {CURRENCY} ≈ {dossier.exchange.rate.toFixed(2)} {dossier.exchange.local_currency}{" "}
+              <span className="text-xs text-stone-400">(BCE, {dossier.exchange.date})</span>
+            </p>
+          )}
+
+          {dossier.guide && (
+            <div>
+              <p className="leading-relaxed text-stone-700">{dossier.guide.extract}</p>
+              <p className="mt-1 text-xs text-stone-400">{dossier.guide.attribution}</p>
+            </div>
+          )}
+
+          {dossier.pois.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">À voir</p>
+              <ul className="mt-1 space-y-1">
+                {dossier.pois.map((poi) => (
+                  <li key={poi.id} className="text-stone-700">
+                    <a
+                      href={poi.website ?? poi.osm_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-brand-700 underline"
+                    >
+                      {poi.name}
+                    </a>
+                    <span className="text-xs text-stone-500"> · {poi.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {dossier.missing.length > 0 && (
+            <p className="text-xs text-stone-500">
+              Indisponible pour l'instant : {dossier.missing.join(", ").toLowerCase()}.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={busy}
+            className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100 disabled:opacity-60"
+          >
+            {busy ? "Actualisation…" : "Actualiser"}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ----------------------------------------------------- carnet de voyage */
+
+/**
+ * Le carnet : le document qu'une agence imprime avant le départ. Une page, tout
+ * ce qu'il faut sur place, et le bouton d'impression d'Android — qui sait aussi
+ * enregistrer en PDF.
+ */
+function CarnetScreen({
+  tripId,
+  revision,
+  onBack,
+}: {
+  tripId: number;
+  revision: number;
+  onBack: () => void;
+}) {
+  const trip = useMemo(() => store.getTrip(tripId), [tripId, revision]);
+  if (!trip) return <Empty title="Ce voyage n'existe plus" />;
+
+  const travellers = store.listTravellers(tripId);
+  const bookings = store.listBookings(tripId);
+  const expenses = store.listExpenses(tripId);
+  const checklist = store.listChecklist(tripId);
+  const budget = budgetStatus(trip, bookings, expenses);
+  const itinerary = buildItinerary(trip, bookings, expenses);
+  const transfers = settlementPlan(splitBalances(travellers, expenses));
+  const practical = practicalFor(
+    countryCodeFromName(trip.destination_country) ?? trip.destination_country,
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-2 print:hidden">
+        <button type="button" onClick={onBack} className="text-sm text-stone-500">
+          ← Retour au voyage
+        </button>
+        <button
+          type="button"
+          onClick={() => printPage(`Carnet — ${trip.title}`)}
+          className="rounded-xl bg-brand-600 px-3.5 py-2.5 text-sm font-semibold text-white active:bg-brand-700"
+        >
+          Imprimer / PDF
+        </button>
+      </div>
+
+      <header className="border-b border-stone-200 pb-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">
+          Carnet de voyage
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold text-stone-900">{trip.title}</h1>
+        <p className="mt-1 text-sm text-stone-600">
+          {trip.destination_city}, {trip.destination_country} ·{" "}
+          {formatDateRange(trip.start_date, trip.end_date)} · {formatNights(tripNights(trip))} ·{" "}
+          {formatTravellers(travellers.length)}
+        </p>
+        <p className="text-sm text-stone-500">
+          {STAGE_LABEL[trip.stage]} · {formatMoney(budget.committed_cents, CURRENCY)} engagés ·{" "}
+          {formatMoney(budget.per_traveller_cents, CURRENCY)} par personne
+        </p>
+      </header>
+
+      <CarnetSection title="Qui part">
+        <p className="text-sm text-stone-700">
+          {travellers.map((traveller) => traveller.name).join(", ")}
+        </p>
+      </CarnetSection>
+
+      <CarnetSection title="Le programme">
+        {itinerary.days.length === 0 ? (
+          <p className="text-sm text-stone-500">Rien de planifié.</p>
+        ) : (
+          <ol className="space-y-2">
+            {itinerary.days.map((day) => (
+              <li key={day.date} className="text-sm">
+                <p className="font-medium text-stone-900">
+                  Jour {day.day_number}
+                  <span className="ml-2 font-normal text-stone-500">{formatDate(day.date)}</span>
+                </p>
+                {day.starts.length === 0 && day.ongoing.length === 0 ? (
+                  <p className="text-stone-400">Libre.</p>
+                ) : (
+                  <>
+                    <ul className="text-stone-700">
+                      {day.starts.map((booking) => (
+                        <li key={`s${booking.id}`}>
+                          {booking.vendor}
+                          {booking.description ? ` — ${booking.description}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    {/* Une ligne par prestation en cours remplirait la page de
+                        répétitions : sur papier, une seule suffit. */}
+                    {day.ongoing.length > 0 && (
+                      <p className="text-stone-500">
+                        En cours : {day.ongoing.map((booking) => booking.vendor).join(", ")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </CarnetSection>
+
+      <CarnetSection title="Les réservations">
+        {bookings.length === 0 ? (
+          <p className="text-sm text-stone-500">Aucune réservation.</p>
+        ) : (
+          <ul className="space-y-1.5 text-sm">
+            {bookings.map((booking) => (
+              <li key={booking.id} className="flex justify-between gap-3">
+                <span className="text-stone-700">
+                  <strong className="font-medium text-stone-900">{booking.vendor}</strong> ·{" "}
+                  {BOOKING_LABEL[booking.type]} · {formatDate(booking.start_at)}
+                  {booking.description ? ` — ${booking.description}` : ""}
+                </span>
+                <span className="shrink-0 tabular-nums text-stone-700">
+                  {formatMoney(booking.amount_cents, CURRENCY)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CarnetSection>
+
+      {checklist.length > 0 && (
+        <CarnetSection title="Avant de partir">
+          <ul className="space-y-1 text-sm text-stone-700">
+            {checklist.map((item) => (
+              <li key={item.id}>
+                {item.done ? "☑" : "☐"} {item.label}
+              </li>
+            ))}
+          </ul>
+        </CarnetSection>
+      )}
+
+      {practical && (
+        <CarnetSection title="En cas de pépin">
+          <ul className="space-y-1 text-sm text-stone-700">
+            <li>Urgences : {practical.emergency}</li>
+            <li>Monnaie : {practical.currency}</li>
+            <li>
+              Prises : {practical.plugs} · {practical.voltage}
+            </li>
+            <li>On roule à {practical.drive}</li>
+            <li>Pourboire : {practical.tipping}</li>
+            <li>Entrée : {practical.entry}</li>
+          </ul>
+          <p className="mt-2 text-xs text-stone-500">
+            Vérifiez les conditions d'entrée sur France Diplomatie ({OFFICIAL_ADVICE_URL}).
+          </p>
+        </CarnetSection>
+      )}
+
+      {transfers.length > 0 && (
+        <CarnetSection title="Pour être quittes">
+          <ul className="space-y-1 text-sm text-stone-700">
+            {transfers.map((transfer) => (
+              <li key={`${transfer.from_user_id}-${transfer.to_user_id}`}>
+                {transfer.from_name} → {transfer.to_name} :{" "}
+                {formatMoney(transfer.amount_cents, CURRENCY)}
+              </li>
+            ))}
+          </ul>
+        </CarnetSection>
+      )}
+
+      <p className="text-xs text-stone-400">
+        Journey Valley · carnet établi le {formatDate(store.today())}
+      </p>
+    </div>
+  );
+}
+
+function CarnetSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="break-inside-avoid">
+      <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-stone-500">
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }
 
@@ -1133,10 +1964,48 @@ function SavingsScreen({ revision, onOpen }: { revision: number; onOpen: (id: nu
 
 function SettingsScreen({ onChanged }: { onChanged: () => void }) {
   const db = store.getDb();
+  const [network, setNetwork] = useState(networkAllowed());
+  const cached = Object.keys(db.cache ?? {}).length;
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-stone-900">Réglages</h1>
+
+      <Card title="Réseau">
+        <label className="flex items-center justify-between gap-3 px-4 py-3">
+          <span className="text-sm text-stone-800">Autoriser les services en ligne</span>
+          <input
+            type="checkbox"
+            checked={network}
+            onChange={(event) => {
+              setNetworkAllowed(event.target.checked);
+              setNetwork(event.target.checked);
+            }}
+            className="h-5 w-5 rounded border-stone-300"
+          />
+        </label>
+        <p className="border-t border-stone-100 px-4 py-3 text-xs leading-relaxed text-stone-500">
+          Décochez et l'application ne contacte plus rien : le reste continue de fonctionner, avec
+          les dernières réponses gardées en mémoire. Quand c'est coché, elle ne parle qu'à six
+          services libres — Nominatim, Overpass, Open-Meteo, Frankfurter et Wikipédia — pour situer
+          une ville, chercher des activités, la météo, les taux et la présentation. Aucune donnée
+          personnelle n'est envoyée : seulement le nom d'un lieu et des dates.
+        </p>
+        {cached > 0 && (
+          <div className="border-t border-stone-100 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => {
+                store.clearCache();
+                onChanged();
+              }}
+              className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm font-semibold text-stone-700 active:bg-stone-100"
+            >
+              Vider le cache ({cached} réponse{cached > 1 ? "s" : ""})
+            </button>
+          </div>
+        )}
+      </Card>
 
       <Card title="Sur cet appareil">
         <dl className="divide-y divide-stone-100 text-sm">
@@ -1144,6 +2013,7 @@ function SettingsScreen({ onChanged }: { onChanged: () => void }) {
             ["Voyages", db.trips.length],
             ["Réservations", db.bookings.length],
             ["Dépenses", db.expenses.length],
+            ["Alertes prix", (db.watches ?? []).length],
             ["Stockage", window.JVStore ? "Mémoire de l'app" : "Navigateur"],
           ].map(([label, value]) => (
             <div key={String(label)} className="flex justify-between px-4 py-2.5">
@@ -1182,9 +2052,9 @@ function SettingsScreen({ onChanged }: { onChanged: () => void }) {
       </div>
 
       <p className="text-xs leading-relaxed text-stone-500">
-        Cette version garde tout sur le téléphone : pas de compte, pas de serveur, rien ne sort de
-        l'appareil. Les compagnons sont des prénoms que vous tapez, pas des comptes ; le partage
-        entre vraies personnes, c'est le site.
+        Vos voyages restent sur le téléphone : pas de compte, pas de serveur Journey Valley, rien
+        de ce que vous saisissez ne part ailleurs. Les compagnons sont des prénoms que vous tapez,
+        pas des comptes ; le partage entre vraies personnes, c'est le site.
       </p>
     </div>
   );

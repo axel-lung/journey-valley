@@ -1,8 +1,9 @@
-import { geocode, type Place } from "./api/geo";
-import { guideFor, type DestinationGuide } from "./api/guide";
-import { convertCents, ratesFor, type RateSet } from "./api/fx";
-import { poisAround, type PointOfInterest } from "./api/poi";
-import { weatherFor, type WeatherOutlook } from "./api/weather";
+import type { Place } from "./api/geo";
+import type { DestinationGuide } from "./api/guide";
+import { convertCents, type RateSet } from "./api/fx";
+import { geocode, guideFor, poisAround, ratesFor, weatherFor } from "./api/live";
+import type { PointOfInterest } from "./api/poi";
+import type { WeatherOutlook } from "./api/weather";
 import type { Currency } from "./money";
 import { countryCodeFromName, practicalFor, type PracticalInfo } from "./practical";
 import type { Trip } from "./types";
