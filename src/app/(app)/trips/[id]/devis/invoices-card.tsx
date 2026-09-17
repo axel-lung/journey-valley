@@ -174,12 +174,20 @@ export function InvoicesCard({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={`Montant (${currency})`}
-              hint={`Proposé : ${formatMoney(suggestions[kind], currency)}. Vide = le reste dû.`}
+              hint={
+                kind === "deposit"
+                  ? `Acompte proposé : ${formatMoney(suggestions.deposit, currency)}. Modifiable.`
+                  : `Reste dû : ${formatMoney(suggestions.balance, currency)}.`
+              }
             >
+              {/* La clé force le champ à se réinitialiser quand on change de
+                  type : un montant d'acompte ne doit pas rester affiché sur un
+                  solde. */}
               <input
+                key={kind}
                 name="amount"
                 inputMode="decimal"
-                placeholder={(suggestions[kind] / 100).toFixed(0)}
+                defaultValue={(suggestions[kind] / 100).toFixed(2).replace(".", ",")}
                 className={inputClass}
               />
             </Field>

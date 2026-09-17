@@ -72,7 +72,7 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 
 ```bash
 npm run typecheck && npm test        # 162 tests unitaires
-npm run build && npm run smoke       # 55 vérifications web bout-en-bout
+npm run build && npm run smoke       # 57 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 19 vérifications sur le bundle Android
 ```

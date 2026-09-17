@@ -6,7 +6,7 @@ import { z } from "zod";
 import { assertAdvisor, getAgency } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { recordActivity } from "@/lib/db";
-import { billingFor } from "@/lib/invoices";
+import { billingFor, suggestedAmount } from "@/lib/invoices";
 import {
   cancel,
   createInvoice,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/invoices-store";
 import { dossierMargin } from "@/lib/margin";
 import { formatMoney, parseAmountToCents } from "@/lib/money";
-import { createQuote, deleteQuote, getQuote, markSent } from "@/lib/quotes";
+import { createQuote, deleteQuote, getQuote, listQuotes, markSent } from "@/lib/quotes";
 import { getTrip, listBookings, membershipRole } from "@/lib/trips";
 
 /**
@@ -165,7 +165,12 @@ export async function createInvoiceAction(
   if (parsed.data.amount !== "" && typed === null) {
     return { error: "Le montant n'est pas lisible : 1 194 ou 1194,00." };
   }
-  const amount = typed ?? billing.remaining_cents;
+
+  // Champ laissé vide : on retient ce que l'écran proposait pour ce type de
+  // facture — un acompte reste un acompte, pas la totalité du dossier.
+  const accepted = listQuotes(trip.id).find((quote) => quote.status === "accepted");
+  const reference = accepted ?? { total_cents: margin.sell_cents, deposit_percent: 30 };
+  const amount = typed ?? suggestedAmount(parsed.data.kind, reference, billing);
 
   if (amount <= 0) return { error: "Le montant doit être supérieur à zéro." };
   if (amount > billing.remaining_cents) {

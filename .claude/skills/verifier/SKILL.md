@@ -10,9 +10,9 @@ sans avoir vu le compte final.
 
 ```bash
 npm run typecheck
-npm test                                     # attendu : 153 tests
+npm test                                     # attendu : 162 tests
 npm run build
-npm run smoke                                # attendu : 48/48
+npm run smoke                                # attendu : 57/57
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web
 npm run apk:test                             # attendu : 19/19
 ```

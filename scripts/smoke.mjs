@@ -384,9 +384,19 @@ try {
   await page.goto(`${tripUrl}/devis`);
   await page.waitForSelector("text=Reste à facturer");
   const invoiceForm = page.locator('form:has(input[name="due_date"])');
+  // Le dossier est vendu 1 500 € ; l'acompte du devis accepté est de 30 %.
+  check(
+    "the deposit amount is prefilled at the quote's percentage, not the whole file",
+    (await invoiceForm.locator('input[name="amount"]').inputValue()) === "450,00",
+    await invoiceForm.locator('input[name="amount"]').inputValue(),
+  );
   await invoiceForm.getByRole("button", { name: "Préparer la facture" }).click();
   await page.waitForSelector("text=FAC-");
   check("a deposit invoice is drafted from the accepted quote", await page.getByText(/FAC-\d{4}-0001/).isVisible());
+  check(
+    "the drafted deposit is the percentage, not the balance",
+    await page.getByText(/450,00\s€|450\s€/).first().isVisible(),
+  );
 
   await page.getByRole("button", { name: "Émettre" }).click();
   await page.waitForSelector("text=Émise");
