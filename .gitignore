@@ -18,3 +18,4 @@ coverage/
 
 mobile/dist/
 mobile/debug.keystore
+mobile/android/src/app/journeyvalley/Config.java

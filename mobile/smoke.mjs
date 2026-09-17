@@ -1,24 +1,58 @@
 /**
- * Drives the offline bundle that ships inside the APK, in a phone-sized
- * Chromium. Everything the APK does lives here except the Java shell, so this
- * is where the mobile build is actually tested.
+ * Drives the Android bundle against a real Journey Valley server, in a
+ * phone-sized Chromium.
  *
- *   npm run apk:web && npm run apk:test
+ * The app is no longer a standalone offline notebook: it signs in, reads the
+ * agency's API, and shows a different product depending on who you are. So the
+ * test boots the production server on a throwaway database and points the
+ * bundle at it — everything the APK does lives here except the Java shell.
+ *
+ *   npm run build && npm run apk:web && npm run apk:test
  */
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { existsSync, globSync, readFileSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
-const www = resolve(dirname(fileURLToPath(import.meta.url)), "dist", "www");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const www = join(root, "mobile", "dist", "www");
 if (!existsSync(join(www, "app.js"))) {
   throw new Error("No bundle to test. Run `npm run apk:web` first.");
 }
 
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
+const API_PORT = 3114;
+const API = `http://127.0.0.1:${API_PORT}`;
+const dataDir = join(root, ".mobile-smoke");
+rmSync(dataDir, { recursive: true, force: true });
+mkdirSync(dataDir, { recursive: true });
 
-const server = createServer((request, response) => {
+// Le bundle est construit avec l'adresse du serveur ; on vérifie qu'on teste
+// bien celui qu'on vient de démarrer, sinon les échecs seraient incompréhensibles.
+const bundle = readFileSync(join(www, "app.js"), "utf8");
+if (!bundle.includes(API)) {
+  throw new Error(
+    `Ce bundle vise un autre serveur que ${API}.\n` +
+      `Reconstruisez-le : JV_SERVER_URL=${API} npm run apk:web`,
+  );
+}
+
+const api = spawn("node_modules/.bin/next", ["start", "-p", String(API_PORT)], {
+  cwd: root,
+  env: {
+    ...process.env,
+    DATABASE_PATH: join(dataDir, "mobile.db"),
+    JV_DISABLE_LIVE_APIS: "1",
+    WATCH_CRON_SECRET: "mobile-smoke",
+  },
+  detached: true,
+});
+api.stdout.on("data", () => {});
+api.stderr.on("data", (chunk) => process.stderr.write(chunk));
+
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
+const files = createServer((request, response) => {
   const path = request.url === "/" ? "/index.html" : (request.url ?? "/");
   const file = join(www, path.replace(/^\/+/, "").split("?")[0]);
   if (!file.startsWith(www) || !existsSync(file)) {
@@ -29,8 +63,20 @@ const server = createServer((request, response) => {
   response.end(readFileSync(file));
 });
 
-await new Promise((done) => server.listen(0, "127.0.0.1", done));
-const BASE = `http://127.0.0.1:${server.address().port}`;
+await new Promise((done) => files.listen(0, "127.0.0.1", done));
+const BASE = `http://127.0.0.1:${files.address().port}`;
+
+async function waitForApi() {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      if ((await fetch(`${API}/login`)).ok) return;
+    } catch {
+      /* pas encore prêt */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error("Le serveur n'a pas démarré à temps.");
+}
 
 function chromiumLaunchOptions() {
   const candidates = [
@@ -53,185 +99,142 @@ function check(name, ok, detail = "") {
   console.log(`${ok ? "✓" : "✗"} ${name}${ok || !detail ? "" : ` — ${detail}`}`);
 }
 
+async function signIn(page, email) {
+  await page.goto(BASE);
+  await page.waitForSelector("text=Se connecter");
+  await page.fill('input[name="email"]', email);
+  await page.fill('input[name="password"]', "journey2026");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+}
+
 let browser;
 try {
+  await waitForApi();
   browser = await chromium.launch(chromiumLaunchOptions());
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+
+  // 1. L'écran de connexion, et ce qu'il refuse.
   await page.goto(BASE);
-
-  // 1. First launch seeds the demo trips.
-  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
-  check("the demo trips are there on first launch", await page.getByText("Week-end à Lisbonne").isVisible());
-
-  // 2. A trip opens with its budget and savings worked out.
-  await page.getByText("Road trip dans les fjords norvégiens").click();
-  await page.waitForSelector("text=Engagé");
-  check("the package saving is shown", await page.getByText("Réserver vous-même vous garde").isVisible());
-  check("the saving matches the quote minus the bookings", await page.getByText(/1\s003\s€/).first().isVisible());
-
-  // 3. Shared costs settle between the three travellers.
-  check("the settlement is computed", await page.getByText("Pour être quittes").isVisible());
-  check("a companion owes their share", await page.getByText(/doit 29\s€/).first().isVisible());
-
-  // 4. Logging an expense moves the balances.
-  await page.getByRole("button", { name: "Noter une dépense" }).click();
-  await page.locator('input[name="amount"]').fill("90");
-  await page.locator('input[name="description"]').fill("Billets de ferry");
-  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
-  await page.waitForSelector("text=Billets de ferry");
-  check("the expense is saved", await page.getByText("Billets de ferry").first().isVisible());
-  check("the split is recalculated", await page.getByText(/doit 59\s€/).first().isVisible());
-
-  // 4b. The preparation checklist.
+  await page.waitForSelector("text=Journey Valley");
+  await page.fill('input[name="email"]', "camille@journeyvalley.app");
+  await page.fill('input[name="password"]', "mauvais");
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.waitForSelector("text=E-mail ou mot de passe incorrect");
   check(
-    "the seeded checklist is there",
-    await page.getByText("Permis de conduire international").isVisible(),
-  );
-  await page.getByRole("button", { name: "Cocher Cartes hors-ligne téléchargées" }).click();
-  await page.waitForSelector('button[aria-label="Décocher Cartes hors-ligne téléchargées"]');
-  check(
-    "a checklist item can be ticked off",
-    await page.getByRole("button", { name: "Décocher Cartes hors-ligne téléchargées" }).isVisible(),
+    "a wrong password is refused, without saying which part was wrong",
+    await page.getByText("E-mail ou mot de passe incorrect.").isVisible(),
   );
 
-  // 4c. The offline travel file: day by day, and what to do in an emergency.
+  // 2. Le conseiller : son portefeuille et sa marge nette.
+  await signIn(page, "camille@journeyvalley.app");
+  await page.waitForSelector("text=Marge nette, dossiers réservés");
+  check("an advisor signs in and sees their portfolio", await page.getByText("Escale Voyages").first().isVisible());
   check(
-    "the day-by-day programme is built offline",
-    await page.getByText("Jour 1").first().isVisible(),
+    "the advisor's home leads with the net margin",
+    await page.getByText("Marge nette, dossiers réservés").isVisible(),
   );
   check(
-    "the practical sheet is available with no network",
-    await page.getByText("En cas de pépin").isVisible(),
-  );
-  check(
-    "the practical sheet knows the country",
-    await page.getByText("NOK").first().isVisible(),
-  );
-
-  // 4d. Search, embedded in the app. With no booking provider connected the
-  // estimator answers, and the screen has to say so rather than pass computed
-  // figures off as offers.
-  const search = page.locator("form").filter({ hasText: "Départ de" });
-  await search.locator('input[name="origin"]').fill("Lyon");
-  await search.getByRole("button", { name: "Chercher" }).click();
-  await page.waitForSelector("text=Estimations, pas des offres réservables");
-  check(
-    "a flight search answers inside the app",
-    await page.getByText("Estimations, pas des offres réservables").isVisible(),
-  );
-  check(
-    "the estimates are not sold as bookable offers",
-    await page.getByText(/Aucun fournisseur de réservation n'est connecté/).isVisible(),
+    "the advisor sees which client each file is for",
+    await page.getByText(/Sam Ortega|Noor Haddad/).first().isVisible(),
   );
 
-  // 4e. A result becomes a booking on the trip.
-  const bookingsBefore = await page.getByText(/^Réservations \(\d+\)$/).innerText();
-  await page.getByRole("button", { name: "Ajouter au voyage" }).first().click();
-  await page.waitForSelector("text=Ajouté ✓");
-  const bookingsAfter = await page.getByText(/^Réservations \(\d+\)$/).innerText();
-  check("a search result is imported as a booking", bookingsBefore !== bookingsAfter,
-    `${bookingsBefore} → ${bookingsAfter}`);
-
-  // 4f. A price alert, checked on demand and remembered.
-  await search.locator('input[name="target"]').fill("400");
-  await search.getByRole("button", { name: "Surveiller" }).click();
-  await page.waitForSelector("text=Alertes prix (1)");
-  check("a price alert is created", await page.getByText("Alertes prix (1)").isVisible());
-  check("a new alert has never been checked", await page.getByText("Jamais vérifiée").isVisible());
-
-  await page.getByRole("button", { name: "Vérifier" }).click();
-  await page.waitForSelector("text=Dernier prix");
+  // 3. Un dossier : programme, prix, marge.
+  await page.getByText("Kyoto en automne").click();
+  await page.waitForSelector("text=Jour 1");
+  check("a file opens on its day-by-day programme", await page.getByText("Jour 1").first().isVisible());
   check(
-    "checking an alert records a price",
-    await page.getByText(/Dernier prix .* · meilleur /).isVisible(),
+    "a return leg is a day of its own, not a fortnight of 'en cours'",
+    (await page.getByText("retour").count()) >= 1,
   );
 
-  // 4g. Switching the network off leaves the app usable and honest about it.
-  await page.getByRole("button", { name: "Réglages" }).click();
-  await page.getByRole("checkbox").uncheck();
+  await page.getByRole("button", { name: "Prix" }).click();
+  await page.waitForSelector("text=Marge nette");
+  check("the advisor sees the purchase cost of each line", await page.getByText(/achat/).first().isVisible());
   check(
-    "the network can be switched off",
-    (await page.getByText(/ne contacte plus rien/).count()) === 1,
-  );
-  await page.getByRole("button", { name: "Voyages" }).click();
-  await page.getByText("Road trip dans les fjords norvégiens").click();
-  await page.getByRole("button", { name: "Charger la fiche" }).click();
-  await page.waitForSelector("text=L'accès réseau est désactivé dans les réglages");
-  check(
-    "the destination file says why it is empty offline",
-    await page.getByText("L'accès réseau est désactivé dans les réglages").isVisible(),
+    "the non-EU exemption is shown where it applies",
+    await page.getByText("Hors UE · marge exonérée").first().isVisible(),
   );
 
-  // 4h. The travel book, printable from the phone.
-  await page.getByRole("button", { name: "Ouvrir le carnet de voyage" }).click();
+  // 4. Le carnet, imprimable depuis le téléphone.
+  await page.getByRole("button", { name: "Documents" }).click();
+  await page.getByRole("button", { name: /carnet/ }).click();
   await page.waitForSelector("text=Carnet de voyage");
-  check("the travel book opens", await page.getByText("Le programme").isVisible());
-  check(
-    "the travel book carries the practical page",
-    await page.getByText("En cas de pépin").isVisible(),
-  );
+  check("the travel book opens from the phone", await page.getByText("Le programme").isVisible());
   check(
     "the travel book can be printed or saved as a PDF",
     await page.getByRole("button", { name: "Imprimer / PDF" }).isVisible(),
   );
+
+  // 5. La page pratique, disponible sans réseau.
   await page.getByText("← Retour au voyage").click();
-  await page.waitForSelector("text=Ouvrir le carnet de voyage");
-
-  // Back on, so the rest of the run is unaffected.
-  await page.getByRole("button", { name: "Réglages" }).click();
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Voyages" }).click();
-  await page.getByText("Road trip dans les fjords norvégiens").click();
-
-  // 5. It survives a restart — which is the whole point of the storage layer.
-  await page.reload();
-  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
-  await page.getByText("Road trip dans les fjords norvégiens").click();
-  check("data survives a restart", await page.getByText("Billets de ferry").first().isVisible());
-
-  // 5b. An expense can be split between only some of the travellers.
-  await page.getByRole("button", { name: "Noter une dépense" }).click();
-  const targeted = page.locator("form").filter({ hasText: "Qui participe" });
-  await targeted.locator('input[name="amount"]').fill("30");
-  await targeted.locator('input[name="description"]').fill("Taxi à deux");
-  await targeted.getByRole("button", { name: "Noor", exact: true }).click();
-  await page.getByRole("button", { name: "Ajouter la dépense" }).click();
-  await page.waitForSelector("text=Taxi à deux");
+  await page.getByRole("button", { name: "Sur place" }).click();
+  await page.waitForSelector("text=En cas de pépin");
   check(
-    "an expense can name who it concerns",
-    await page.getByText(/partagée entre Moi, Sam/).first().isVisible(),
+    "the practical sheet works with no network at all",
+    await page.getByText("Urgences").first().isVisible(),
   );
 
-  // 6. A new trip can be planned from the phone.
-  await page.getByText("← Tous les voyages").click();
-  await page.getByRole("button", { name: "+ Voyage" }).click();
-  await page.locator('input[name="title"]').fill("Week-end à Porto");
-  await page.locator('input[name="destination_city"]').fill("Porto");
-  await page.locator('input[name="budget"]').fill("600");
-  await page.locator('input[name="agency_quote"]').fill("950");
-  await page.getByRole("button", { name: "Créer", exact: true }).click();
-  await page.waitForSelector("text=Week-end à Porto");
-  check("a new trip is created as an idea", await page.getByText("Idée").first().isVisible());
+  // 6. L'onglet Marges.
+  await page.getByRole("button", { name: "Marges" }).click();
+  await page.waitForSelector("text=Marge nette, après TVA sur marge");
+  check(
+    "the margins tab totals the agency net of VAT",
+    await page.getByText("Marge nette, après TVA sur marge").isVisible(),
+  );
 
-  // 7. The stage machine walks it forward.
-  await page.getByRole("button", { name: "Passer en préparation" }).click();
-  await page.waitForSelector("text=En préparation");
-  check("stages move forward", await page.getByText("En préparation").first().isVisible());
+  // 7. Hors ligne : ce qui a été vu reste lisible, et le dit.
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: "Dossiers" }).click();
+  await page.waitForSelector("text=Hors ligne");
+  check(
+    "what was loaded once still reads offline, and says it is dated",
+    await page.getByText(/Hors ligne : voici la dernière version connue/).isVisible(),
+  );
+  await page.context().setOffline(false);
 
-  // 8. The savings tab rolls every compared trip up.
-  await page.getByRole("button", { name: "Économies" }).click();
-  await page.waitForSelector("text=Gardé dans votre poche");
-  check("the savings tab lists compared trips", await page.getByText("Road trip dans les fjords norvégiens").first().isVisible());
-
-  // 9. Resetting brings the demo back.
-  page.on("dialog", (dialog) => dialog.accept());
+  // 8. Le voyageur : le même appareil, un autre produit.
   await page.getByRole("button", { name: "Réglages" }).click();
-  await page.getByRole("button", { name: "Recharger la démonstration" }).click();
-  await page.waitForSelector("text=Road trip dans les fjords norvégiens");
-  check("the demo can be reloaded", (await page.getByText("Week-end à Porto").count()) === 0);
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Se déconnecter" }).click();
+  await page.waitForSelector('input[name="email"]');
+
+  await signIn(page, "sam@journeyvalley.app");
+  await page.waitForSelector("text=Espace voyageur");
+  check("a client signs in to a travellers' app", await page.getByText("Espace voyageur").isVisible());
+  check(
+    "the client has no margins tab at all",
+    (await page.getByRole("button", { name: "Marges" }).count()) === 0,
+  );
+
+  await page.getByText("Week-end à Lisbonne").click();
+  await page.waitForSelector("text=Jour 1");
+  const clientText = await page.locator("body").innerText();
+  check(
+    "the client is never shown a purchase cost",
+    !clientText.includes("achat") && !clientText.includes("Marge"),
+    clientText.match(/.{0,40}(achat|Marge).{0,40}/)?.[0] ?? "",
+  );
+  check(
+    "the client has no price tab either",
+    (await page.getByRole("button", { name: "Prix", exact: true }).count()) === 0,
+  );
+
+  // 9. Et l'API elle-même ne livre rien à un jeton absent ou faux.
+  const anonymous = await fetch(`${API}/api/mobile/home`);
+  check("the API refuses a request with no token", anonymous.status === 401);
+  const forged = await fetch(`${API}/api/mobile/home`, {
+    headers: { authorization: "Bearer not-a-real-token" },
+  });
+  check("the API refuses a forged token", forged.status === 401);
 } finally {
   await browser?.close();
-  server.close();
+  files.close();
+  try {
+    process.kill(-api.pid, "SIGTERM");
+  } catch {
+    api.kill("SIGTERM");
+  }
+  rmSync(dataDir, { recursive: true, force: true });
 }
 
 const failed = checks.filter((entry) => !entry.ok);

@@ -28,7 +28,11 @@ import org.json.JSONObject;
  */
 public class Net {
 
-  /** The only hosts this app may contact. Adding one is a deliberate act. */
+  /**
+   * The only hosts this app may contact: six free services, plus the agency's
+   * own Journey Valley server, whose address is fixed when the APK is built
+   * (see Config.java). Adding one is a deliberate act, at build time.
+   */
   private static final Set<String> ALLOWED = new HashSet<>(
       Arrays.asList(
           "nominatim.openstreetmap.org",
@@ -37,6 +41,11 @@ public class Net {
           "archive-api.open-meteo.com",
           "api.frankfurter.app",
           "fr.wikipedia.org"));
+
+  static {
+    final String host = Config.serverHost();
+    if (host != null) ALLOWED.add(host);
+  }
 
   private static final String USER_AGENT =
       "JourneyValley-Android/0.1 (https://github.com/axel-lung/journey-valley)";
@@ -55,17 +64,41 @@ public class Net {
 
   @JavascriptInterface
   public void get(final String url, final String requestId) {
+    send(url, null, null, requestId);
+  }
+
+  /**
+   * POST, pour se connecter au serveur de l'agence. Le corps est du JSON, et
+   * le jeton de session voyage dans l'en-tête Authorization plutôt que dans
+   * l'URL : une URL se retrouve dans des journaux, pas un en-tête.
+   */
+  @JavascriptInterface
+  public void post(final String url, final String body, final String token, final String requestId) {
+    send(url, body == null ? "" : body, token, requestId);
+  }
+
+  /** GET authentifié : même chose, sans corps. */
+  @JavascriptInterface
+  public void getWithToken(final String url, final String token, final String requestId) {
+    send(url, null, token, requestId);
+  }
+
+  private void send(
+      final String url, final String body, final String token, final String requestId) {
     pool.execute(
         new Runnable() {
           @Override
           public void run() {
             try {
               final URL parsed = new URL(url);
-              if (!"https".equals(parsed.getProtocol()) || !ALLOWED.contains(parsed.getHost())) {
+              final boolean secure =
+                  "https".equals(parsed.getProtocol())
+                      || (Config.allowsPlainHttp() && "http".equals(parsed.getProtocol()));
+              if (!secure || !ALLOWED.contains(parsed.getHost())) {
                 resolve(requestId, false, 0, "Hôte non autorisé : " + parsed.getHost());
                 return;
               }
-              request(parsed, requestId);
+              request(parsed, body, token, requestId);
             } catch (Exception error) {
               resolve(requestId, false, 0, "Requête impossible.");
             }
@@ -73,7 +106,7 @@ public class Net {
         });
   }
 
-  private void request(URL url, String requestId) {
+  private void request(URL url, String body, String token, String requestId) {
     HttpURLConnection connection = null;
     try {
       connection = (HttpURLConnection) url.openConnection();
@@ -81,13 +114,25 @@ public class Net {
       connection.setReadTimeout(READ_TIMEOUT_MS);
       connection.setRequestProperty("User-Agent", USER_AGENT);
       connection.setRequestProperty("Accept", "application/json");
+      if (token != null && token.length() > 0) {
+        connection.setRequestProperty("Authorization", "Bearer " + token);
+      }
+      if (body != null) {
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setDoOutput(true);
+        final java.io.OutputStream out = connection.getOutputStream();
+        out.write(body.getBytes("UTF-8"));
+        out.close();
+      }
 
       final int status = connection.getResponseCode();
       final InputStream stream =
           status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-      final String body = stream == null ? "" : read(stream);
+      // Le corps de la réponse ; celui de la requête s'appelait déjà `body`.
+      final String answer = stream == null ? "" : read(stream);
 
-      resolve(requestId, status >= 200 && status < 300, status, body);
+      resolve(requestId, status >= 200 && status < 300, status, answer);
     } catch (Exception error) {
       resolve(requestId, false, 0, "Service injoignable.");
     } finally {

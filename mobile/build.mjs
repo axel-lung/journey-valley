@@ -11,7 +11,7 @@
  * container without downloading an SDK. See mobile/README.md.
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -23,6 +23,10 @@ const www = join(dist, "www");
 const work = join(dist, "build");
 
 const webOnly = process.argv.includes("--web-only");
+
+// L'adresse du serveur de l'agence. Elle est figée dans l'APK : côté web pour
+// savoir qui appeler, côté Java pour n'autoriser que cet hôte.
+const SERVER_URL = (process.env.JV_SERVER_URL ?? "https://demo.journeyvalley.app").replace(/\/$/, "");
 
 const ANDROID_JAR =
   process.env.ANDROID_JAR ?? "/usr/lib/android-sdk/platforms/android-23/android.jar";
@@ -57,7 +61,10 @@ await esbuild.build({
   target: ["chrome80"],
   jsx: "automatic",
   outfile: join(www, "app.js"),
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: {
+    "process.env.NODE_ENV": '"production"',
+    __JV_SERVER__: JSON.stringify(SERVER_URL),
+  },
   logLevel: "warning",
 });
 
@@ -66,11 +73,21 @@ run("npx", ["@tailwindcss/cli", "-i", join(mobile, "web", "styles.css"), "-o", j
 });
 
 cpSync(join(mobile, "web", "index.html"), join(www, "index.html"));
-console.log(`web bundle → ${www}`);
+console.log(`web bundle → ${www} (serveur : ${SERVER_URL})`);
 
 if (webOnly) process.exit(0);
 
 /* -------------------------------------------------------------------- apk */
+
+// Le fichier de configuration Java, engendré à partir du modèle : c'est lui
+// qui fixe l'hôte autorisé dans le pont réseau.
+writeFileSync(
+  join(mobile, "android", "src", "app", "journeyvalley", "Config.java"),
+  readFileSync(join(mobile, "android", "src", "app", "journeyvalley", "Config.java.tpl"), "utf8").replace(
+    "__SERVER__",
+    SERVER_URL,
+  ),
+);
 
 for (const tool of ["aapt", "apksigner", "dalvik-exchange", "zipalign", "javac", "keytool"]) {
   requireTool(tool);

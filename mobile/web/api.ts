@@ -19,12 +19,8 @@ import {
 } from "../../src/lib/api/weather";
 import { estimateComponentPackagePrice } from "../../src/lib/package";
 import { countryCodeFromName, practicalFor, type PracticalInfo } from "../../src/lib/practical";
-import { offlineProvider } from "../../src/lib/search/offline-provider";
-import type { SearchQuery, SearchResult } from "../../src/lib/search/types";
-import type { Trip } from "../../src/lib/types";
-import { evaluateWatch, type WatchEvaluation } from "../../src/lib/watch";
 import { cachedJson, networkAllowed } from "./net";
-import { CURRENCY, recordWatchPrice, type LocalWatch } from "./store";
+import { CURRENCY } from "./store";
 
 export async function geocode(place: string): Promise<Place | null> {
   const query = place.trim();
@@ -105,7 +101,12 @@ export interface MobileDossier {
  * worth reading, and the caller is told what is missing. The practical sheet
  * is local, so it is there even with the network switched off.
  */
-export async function buildDossier(trip: Trip): Promise<MobileDossier> {
+export async function buildDossier(trip: {
+  destination_city: string;
+  destination_country: string;
+  start_date: string;
+  end_date: string;
+}): Promise<MobileDossier> {
   const practical = practicalFor(
     countryCodeFromName(trip.destination_country) ?? trip.destination_country,
   );
@@ -159,98 +160,5 @@ export async function buildDossier(trip: Trip): Promise<MobileDossier> {
   return { place, weather, guide, pois, exchange, practical, missing, offline: false };
 }
 
-/* ----------------------------------------------------------------- search */
-
-export interface MobileSearchOutcome {
-  results: SearchResult[];
-  /** What answered: real places, or figures computed from the query. */
-  source: "openstreetmap" | "offline";
-  /** Why the estimates stood in, when they did. */
-  note?: string;
-}
-
-/**
- * Activities come from OpenStreetMap when the network is there — real places,
- * without prices, because a map does not know what a museum charges. Flights
- * and stays have no free key-less source, so they stay estimates, clearly
- * labelled as such.
- */
-export async function searchActivities(query: SearchQuery): Promise<MobileSearchOutcome> {
-  const place = await geocode(
-    query.country ? `${query.destination}, ${query.country}` : query.destination,
-  );
-  if (!place) throw new Error(`Impossible de situer « ${query.destination} ».`);
-
-  const pois = await poisAround(place);
-  if (pois.length === 0) throw new Error(`Aucun lieu trouvé autour de ${place.name}.`);
-
-  return {
-    source: "openstreetmap",
-    results: pois.map((poi) => ({
-      id: poi.id,
-      kind: "activity" as const,
-      source: "openstreetmap",
-      vendor: poi.name,
-      title: poi.name,
-      description: `${poi.label} · ${place.name}`,
-      start_at: query.start_date,
-      end_at: null,
-      nights: null,
-      price_cents: 0,
-      price_known: false,
-      currency: CURRENCY,
-      package_price_cents: 0,
-      deeplink: poi.website ?? poi.osm_url,
-    })),
-  };
-}
-
-/**
- * The phone's one search entry point.
- *
- * Activities try OpenStreetMap first — free, key-less, and real. Everything
- * else, and anything that fails, falls back to the shared offline estimator:
- * the same figures the site computes, so the two builds never disagree. The
- * outcome always says which one answered, because a screen that mixes real
- * places with computed prices without saying so is a lie.
- */
-export async function search(query: SearchQuery): Promise<MobileSearchOutcome> {
-  const estimates = async (note?: string): Promise<MobileSearchOutcome> => ({
-    results: await offlineProvider.search(query),
-    source: "offline",
-    note,
-  });
-
-  if (query.kind !== "activity") return estimates();
-  if (!networkAllowed()) return estimates("L'accès réseau est désactivé dans les réglages.");
-
-  try {
-    return await searchActivities(query);
-  } catch (error) {
-    return estimates(error instanceof Error ? error.message : "Service injoignable.");
-  }
-}
-
-/**
- * Runs a watch's search again and files the result. Returns what to tell the
- * traveller, using the same rule as the site's scheduled checker.
- */
-export async function checkWatch(watch: LocalWatch): Promise<WatchEvaluation> {
-  const outcome = await search({
-    kind: watch.kind,
-    origin: watch.origin ?? undefined,
-    destination: watch.destination,
-    start_date: watch.start_date,
-    end_date: watch.end_date ?? undefined,
-    travellers: watch.travellers,
-  });
-
-  const evaluation = evaluateWatch(watch, outcome.results);
-  if (evaluation.best_price_cents !== null) {
-    recordWatchPrice(watch.id, evaluation.best_price_cents);
-  }
-  return evaluation;
-}
-
-/** The package price a component of this kind tends to be resold at. */
+/** Le prix de revente habituel d'une prestation, pour le repère de prix. */
 export { estimateComponentPackagePrice };

@@ -13,6 +13,16 @@ The interface is in French; the code, comments and tests are in English.
 
 ### For the agency
 
+- **A quote that is compliant, not just pretty.** Composed from the priced lines, sent as a public
+  link the client opens without an account, accepted with a name, a timestamp and an IP — a proof,
+  not a read receipt. It carries the standardised information form (arrêté du 1er mars 2018), the
+  Atout France registration, the financial guarantee, the liability insurance and the mediator; and
+  when one of those is missing, the screen says which and why rather than printing a document that
+  would not hold up.
+- **TVA sur marge, done properly.** The tax is *extracted* from the margin (× 20/120), never added
+  to it; the part performed outside the EU is exempt; a mixed package is split across zones in
+  proportion to the purchase costs. Every screen leads with what is kept, not what was invoiced.
+
 - **Margin on every line and every file.** Each booking carries what you paid and what it sells
   for. The file shows the margin, the **taux de marque** (margin ÷ sell) and the **taux de marge**
   (margin ÷ cost) side by side, because confusing the two is how a quote loses money.
@@ -37,7 +47,8 @@ The interface is in French; the code, comments and tests are in English.
   see, and the practical page — plugs, emergency number, which side of the road, entry rules.
 - **A printable travel book**, which the advisor reads with costs and the traveller reads with
   prices — one document, two truths, neither of them false.
-- **An Android app** that carries the lot offline. See [`mobile/README.md`](mobile/README.md).
+- **An Android app** that carries the programme, the documents and the travel book offline. See
+  [`mobile/README.md`](mobile/README.md).
 
 ### Shared by both
 
@@ -128,18 +139,17 @@ you already have at it:
 
 ## On Android
 
-There is a standalone APK too — the whole product on the phone, with no account and no Journey
-Valley server: trips, budgets, search, price alerts, the destination file, the printable travel
-book, the agency comparison and cost splitting.
+The same two views, on the phone. An advisor gets their portfolio and their margins; a traveller
+gets their programme, their documents and their travel book — and the device is never sent a
+purchase cost, because the API does not put one in the payload.
 
 ```bash
-npm run apk      # → mobile/dist/journey-valley.apk
+JV_SERVER_URL=https://votre-agence.example npm run apk   # → mobile/dist/journey-valley.apk
 ```
 
-It shares the domain logic and the API parsers with this app rather than reimplementing them; only
-the transport differs, through a Java bridge that may reach six free services and nothing else, and
-that *Réglages → Réseau* switches off. See [`mobile/README.md`](mobile/README.md) for what it does
-and does not do.
+The server address is fixed at build time, in the bundle and in the Java network bridge, so each
+agency's APK can reach its own server and the six free services, and nothing else. Everything
+loaded once reads again offline, dated. See [`mobile/README.md`](mobile/README.md).
 
 ## Checks
 
@@ -148,7 +158,9 @@ npm test         # unit tests for the money, margin, budget, split and stage log
 npm run typecheck
 npm run build
 npm run smoke    # end-to-end: open an agency → file a client → price a dossier → read the margin
+                 #              → send a compliant quote → accept it from the public link
                  #              → check the traveller is never shown a cost
+npm run apk:test # boots a server and drives the Android bundle against it, in both roles
 npm run apk:test # the Android bundle, driven in a phone-sized browser
 ```
 
@@ -182,6 +194,9 @@ src/
       clients/        the agency's client file
       marges/         margin by month and by dossier
       mon-voyage/     the traveller's own space — no cost is ever read here
+      carnet/         the printable travel book, outside the dossier's tabs
+    devis/[token]/    the public quote: no account, the token is the authorisation
+    api/mobile/       what the Android app reads, role by role
       account/        plan and profile
     api/watches/      the scheduled price-watch sweep
   components/         shared UI, nav, charts
@@ -194,13 +209,21 @@ scripts/smoke.mjs     end-to-end browser test
 
 ## Known gaps
 
-- **No quote to send yet.** The advisor prices the file and the client sees the price in their
-  space; there is no PDF proposal with an accept button, and no deposit tracking. That is the next
-  piece of work, and the one a paying agency will ask for first.
+- **The standardised information form was written from the directive, not copied from the arrêté.**
+  Légifrance and economie.gouv.fr are both blocked from the machine this was built on. The substance
+  is right and every quote links to the official text, but it must be checked word for word before
+  anyone sells with it.
+- **No deposit is collected.** The quote states the deposit and the client accepts online; taking
+  the money is the agency's own affair, and putting it in the product means payments for a third
+  party, which is a different regulatory animal.
+- **No invoice.** Accepting a quote does not produce one, and the VAT figures are not exported to
+  an accountant.
 - **A client account is created by signing up, then added to the file by e-mail.** There is no
   invitation flow, so onboarding a traveller takes two steps and a phone call.
 - **One agency, one advisor.** The schema carries `agency_id` on the user, but there is no way to
   invite a colleague, and no per-advisor margin split.
+- **The phone reads, it does not write.** No dossier, quote or booking is created from the app, and
+  nothing is edited offline.
 - **Plans are still the consumer Free/Plus.** Agency pricing (per agency, not per seat) is decided
   but not implemented, and nothing charges a card.
 - No free key-less API exists for flight or hotel prices; those need Amadeus (free tier, keyed).
