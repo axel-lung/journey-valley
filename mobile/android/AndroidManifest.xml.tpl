@@ -5,9 +5,8 @@
     android:versionName="0.1.0">
 
   <!--
-    The only permission, and only for the six free services listed in Net.java:
-    map data, weather, exchange rates and the destination write-up. Everything
-    else stays on the phone, and the app works with the permission refused.
+    Deux permissions, pour le serveur de l'agence et les six services libres
+    listés dans Net.java. Rien d'autre n'est joignable : la liste est compilée.
   -->
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -18,6 +17,7 @@
       android:label="@string/app_name"
       android:icon="@drawable/ic_launcher"
       android:allowBackup="true"
+      __CLEARTEXT__
       android:hardwareAccelerated="true"
       android:theme="@android:style/Theme.Material.Light.NoActionBar">
     <activity

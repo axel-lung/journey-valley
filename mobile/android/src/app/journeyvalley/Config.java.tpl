@@ -24,9 +24,29 @@ public final class Config {
     }
   }
 
-  /** En clair uniquement pour une adresse locale, le temps d'un essai. */
+  /**
+   * Le clair n'est toléré que sur un réseau privé : la machine elle-même, ou
+   * une adresse RFC 1918 — le temps d'essayer l'application contre un poste de
+   * développement. Un serveur public doit être en HTTPS, et l'est.
+   */
   public static boolean allowsPlainHttp() {
     final String host = serverHost();
-    return host != null && (host.equals("localhost") || host.equals("127.0.0.1"));
+    if (host == null) return false;
+    if (host.equals("localhost") || host.equals("127.0.0.1") || host.equals("10.0.2.2")) return true;
+    if (host.startsWith("192.168.") || host.startsWith("10.")) return true;
+
+    // 172.16.0.0 – 172.31.255.255
+    if (host.startsWith("172.")) {
+      final String[] parts = host.split("\\.");
+      if (parts.length == 4) {
+        try {
+          final int second = Integer.parseInt(parts[1]);
+          return second >= 16 && second <= 31;
+        } catch (NumberFormatException error) {
+          return false;
+        }
+      }
+    }
+    return false;
   }
 }

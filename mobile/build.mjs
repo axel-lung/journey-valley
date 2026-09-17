@@ -89,6 +89,21 @@ writeFileSync(
   ),
 );
 
+// Le manifeste aussi : Android bloque le HTTP en clair depuis la version 9, et
+// on ne lève ce blocage que si le serveur configuré est justement en clair —
+// un APK visant du HTTPS n'a donc aucune tolérance au clair.
+const cleartext = SERVER_URL.startsWith("http://");
+if (cleartext) {
+  console.log(`⚠ ${SERVER_URL} est en clair : l'APK autorisera le HTTP (essais sur réseau local).`);
+}
+writeFileSync(
+  join(dist, "AndroidManifest.xml"),
+  readFileSync(join(mobile, "android", "AndroidManifest.xml.tpl"), "utf8").replace(
+    "__CLEARTEXT__",
+    cleartext ? 'android:usesCleartextTraffic="true"' : "",
+  ),
+);
+
 for (const tool of ["aapt", "apksigner", "dalvik-exchange", "zipalign", "javac", "keytool"]) {
   requireTool(tool);
 }
@@ -111,7 +126,7 @@ const output = join(dist, "journey-valley.apk");
 // 1. Resources, manifest and the web bundle as assets.
 run("aapt", [
   "package", "-f",
-  "-M", join(android, "AndroidManifest.xml"),
+  "-M", join(dist, "AndroidManifest.xml"),
   "-S", join(android, "res"),
   "-A", www,
   "-I", ANDROID_JAR,
