@@ -60,6 +60,12 @@ export default async function PublicQuotePage({
           <div className="text-right text-sm text-stone-500">
             <p className="font-medium text-stone-700">Devis {quote.reference}</p>
             {quote.valid_until && <p>Valable jusqu'au {formatDate(quote.valid_until)}</p>}
+            <a
+              href={`/devis/${quote.token}/pdf`}
+              className="mt-2 inline-block rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 print:hidden"
+            >
+              Télécharger en PDF
+            </a>
           </div>
         </div>
 

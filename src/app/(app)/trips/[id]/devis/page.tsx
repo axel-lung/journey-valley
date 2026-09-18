@@ -151,6 +151,14 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
                       >
                         Voir le devis
                       </Link>
+                      <a
+                        href={`/devis/${quote.token}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                      >
+                        PDF
+                      </a>
                       {quote.status === "draft" && (
                         <>
                           <form action={sendQuoteAction}>

@@ -68,9 +68,12 @@ export default async function CarnetPage({ params }: { params: Promise<{ id: str
         <Link href={`/trips/${trip.id}`} className="text-sm text-stone-500 hover:text-stone-900">
           ← Retour au voyage
         </Link>
-        <p className="text-sm text-stone-500">
-          Utilisez l'impression de votre navigateur pour en faire un PDF.
-        </p>
+        <a
+          href={`/carnet/${trip.id}/pdf`}
+          className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+        >
+          Télécharger le carnet en PDF
+        </a>
       </div>
 
       <header className="border-b border-stone-200 pb-6">

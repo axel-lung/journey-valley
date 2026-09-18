@@ -62,6 +62,12 @@ export default async function PublicInvoicePage({
           {invoice.due_date && (
             <p className="text-sm text-stone-500">Échéance : {formatDate(invoice.due_date)}</p>
           )}
+          <a
+            href={`/facture/${invoice.token}/pdf`}
+            className="mt-2 inline-block rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 print:hidden"
+          >
+            Télécharger en PDF
+          </a>
         </div>
       </header>
 

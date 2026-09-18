@@ -65,6 +65,59 @@ server.stderr.on("data", (chunk) => process.stderr.write(chunk));
 const checks = [];
 let browser;
 
+/**
+ * Downloads a PDF through the browser (so the session cookie travels with it)
+ * and hands back the text it draws.
+ *
+ * The strings in a PDF are written between parentheses, escaped, and encoded
+ * in WinAnsi. Reading them back is what makes "the invoice shows no VAT" a
+ * real check rather than a check that a file was produced.
+ */
+const FROM_CP1252 = {
+  0x80: "\u20ac", 0x85: "\u2026", 0x91: "\u2018", 0x92: "\u2019",
+  0x93: "\u201c", 0x94: "\u201d", 0x95: "\u2022", 0x96: "\u2013",
+  0x97: "\u2014", 0x8c: "\u0152", 0x9c: "\u0153",
+};
+
+async function pdfText(page, url) {
+  const raw = await page.evaluate(async (target) => {
+    const response = await fetch(target, { credentials: "include" });
+    if (!response.ok) return `HTTP ${response.status}`;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let out = "";
+    for (let index = 0; index < bytes.length; index += 4096) {
+      out += String.fromCharCode(...bytes.subarray(index, index + 4096));
+    }
+    return out;
+  }, url);
+
+  if (!raw.startsWith("%PDF")) return { ok: false, text: raw.slice(0, 80) };
+
+  const text = [...raw.matchAll(/\((.*?)\) Tj/g)]
+    .map(([, body]) => {
+      let out = "";
+      for (let index = 0; index < body.length; index += 1) {
+        if (body[index] !== "\\") {
+          out += body[index];
+          continue;
+        }
+        const octal = /^[0-7]{3}/.exec(body.slice(index + 1));
+        if (octal) {
+          const code = parseInt(octal[0], 8);
+          out += FROM_CP1252[code] ?? String.fromCharCode(code);
+          index += 3;
+        } else {
+          out += body[index + 1];
+          index += 1;
+        }
+      }
+      return out;
+    })
+    .join("\n");
+
+  return { ok: true, text };
+}
+
 function check(name, condition, detail = "") {
   checks.push({ name, ok: Boolean(condition), detail });
   console.log(`${condition ? "✓" : "✗"} ${name}${condition || !detail ? "" : ` — ${detail}`}`);
@@ -304,6 +357,17 @@ try {
     "the travel book carries the emergency page",
     await page.getByText("En cas de pépin").isVisible(),
   );
+
+  // Le carnet en PDF : le fichier qu'on remet avant le départ, et qui ne
+  // contient aucun prix — ni celui qu'on paie, ni celui qu'on a payé.
+  const bookPdf = await pdfText(page, `${page.url()}/pdf`);
+  check("the travel book downloads as a PDF", bookPdf.ok, bookPdf.text);
+  check("the travel book PDF carries the bookings", bookPdf.text.includes("Norwegian"));
+  check(
+    "the travel book PDF carries no price at all",
+    !bookPdf.text.includes("\u20ac"),
+    bookPdf.text.match(/.{0,40}\u20ac.{0,40}/)?.[0] ?? "",
+  );
   await page.goto(tripUrl);
 
   // 6. The preparation checklist.
@@ -368,6 +432,24 @@ try {
     !(await guest.locator("body").innerText()).includes("1 200"),
   );
 
+  // Le devis en PDF : c'est le fichier que le conseiller joint à son message,
+  // donc il porte les mêmes obligations que la page — et les mêmes interdits.
+  const quotePdf = await pdfText(guest, `${BASE}${quoteHref}/pdf`);
+  check("the quote downloads as a PDF", quotePdf.ok, quotePdf.text);
+  check(
+    "the quote PDF carries the standardised information form",
+    quotePdf.text.includes("FORMULAIRE D'INFORMATION STANDARDIS"),
+  );
+  check(
+    "the quote PDF carries the agency's registration and guarantor",
+    quotePdf.text.includes("IM069250014"),
+  );
+  check(
+    "the quote PDF never shows a purchase cost",
+    !/1 ?200/.test(quotePdf.text),
+    quotePdf.text.match(/.{0,40}1 ?200.{0,40}/)?.[0] ?? "",
+  );
+
   await guest.fill('input[name="name"]', "Sam Ortega");
   await guest.getByRole("button", { name: "J'accepte ce devis" }).click();
   await guest.waitForSelector("text=Vous avez accepté ce devis");
@@ -414,6 +496,18 @@ try {
     "the invoice never shows VAT, which the scheme forbids",
     !/TVA\s*:/.test(invoiceText) && !invoiceText.includes("20 %"),
     invoiceText.match(/.{0,40}(TVA\s*:|20 %).{0,40}/)?.[0] ?? "",
+  );
+
+  const invoicePdf = await pdfText(client, `${BASE}${invoiceHref}/pdf`);
+  check("the invoice downloads as a PDF", invoicePdf.ok, invoicePdf.text);
+  check(
+    "the invoice PDF carries the margin-scheme mention",
+    invoicePdf.text.includes("R\u00e9gime particulier \u2013 agences de voyages"),
+  );
+  check(
+    "the invoice PDF never puts a figure on the VAT",
+    !/TVA\s*:?\s*[\d(]/.test(invoicePdf.text) && !/\d\s*%\s*(de )?TVA/.test(invoicePdf.text),
+    invoicePdf.text.match(/.{0,40}TVA.{0,40}/)?.[0] ?? "",
   );
   await client.close();
 

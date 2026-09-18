@@ -109,6 +109,16 @@ export function InvoicesCard({
                     Voir la facture
                   </a>
                 )}
+                {invoice.status !== "draft" && (
+                  <a
+                    href={`/facture/${invoice.token}/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={secondaryButtonClass}
+                  >
+                    PDF
+                  </a>
+                )}
                 {invoice.status === "draft" && (
                   <form action={issueInvoiceAction}>
                     <input type="hidden" name="invoice_id" value={invoice.id} />
