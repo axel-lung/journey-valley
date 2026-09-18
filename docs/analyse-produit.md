@@ -235,12 +235,15 @@ profondeur d'un back-office, le reste a la surface d'un outil de devis.
 - Le mode hors-ligne réel dès aujourd'hui, avec affichage daté de la donnée
   périmée.
 
-**La position à tenir :** ne pas courir après Ezus sur la production de voyage.
-Être **le back-office financier et réglementaire des agences françaises
-immatriculées** — celui qui garantit que le devis est opposable, que la TVA sur
-marge est juste, que la facture passera la réforme de 2026-2027 — avec une app
-voyageur correcte en prime. C'est un positionnement que les outils étrangers ne
-peuvent pas copier sans refaire leur moteur de prix.
+**La position à tenir :** être **l'outil de production de voyage des agences
+françaises immatriculées que personne ne sert** — les indépendantes de 1 à 3
+personnes encore sous Excel et Word — et le seul dont les chiffres soient
+opposables : devis conforme, TVA sur marge juste, facture qui passera la
+réforme de 2026-2027, app voyageur en prime. La conformité n'est pas un produit
+à part, c'est la preuve de la promesse : les outils étrangers ne peuvent pas la
+copier sans refaire leur moteur de prix, et les back-offices français calculent
+des marges sans produire la pièce opposable. Le choix de cible et ce qu'il
+écarte sont détaillés dans `besoins-et-entree-marche.md`.
 
 ---
 
