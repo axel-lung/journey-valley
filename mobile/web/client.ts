@@ -11,6 +11,7 @@
  * 3. **Le même code tourne dans un navigateur**, où le pont Java est absent et
  *    où `fetch` prend le relais — c'est ce qui rend le bundle testable.
  */
+import { bridgeRequest } from "./bridge";
 import { getDb, persistNow } from "./store";
 
 declare const __JV_SERVER__: string;
@@ -29,18 +30,17 @@ export class ApiError extends Error {
   }
 }
 
-interface Pending {
-  resolve: (body: string) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-  status?: number;
+/** Le message du serveur, quand il en donne un ; sinon le code. */
+function apiFailure(status: number, body: string): ApiError {
+  let message = status > 0 ? `Erreur ${status}.` : body || "Serveur injoignable.";
+  try {
+    const parsed = JSON.parse(body) as { error?: string };
+    if (parsed.error) message = parsed.error;
+  } catch {
+    /* le corps n'était pas du JSON */
+  }
+  return new ApiError(message, status);
 }
-
-const pending = new Map<string, Pending>();
-let counter = 0;
-
-// Le contrat du pont Java est déclaré dans `bridge.d.ts` — une seule fois, sinon
-// les deux augmentations de `Window` se contredisent.
 
 function origin(): string {
   // Dans un navigateur de développement, le bundle est servi par le serveur
@@ -58,16 +58,15 @@ async function call(path: string, options: { method?: "GET" | "POST"; body?: unk
 
   const bridge = typeof window !== "undefined" ? window.JVNet : undefined;
   if (bridge && (method === "GET" ? bridge.getWithToken : bridge.post)) {
-    const id = `a${(counter += 1)}:${Date.now()}`;
-    const raw = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new ApiError("Le serveur n'a pas répondu à temps.", 0));
-      }, 20_000);
-      pending.set(id, { resolve, reject, timer });
-
-      if (method === "GET") bridge.getWithToken!(url, token ?? "", id);
-      else bridge.post!(url, body ?? "", token ?? "", id);
+    const raw = await bridgeRequest({
+      prefix: "a",
+      timeoutMs: 20_000,
+      onTimeout: () => new ApiError("Le serveur n'a pas répondu à temps.", 0),
+      onFailure: ({ status, body: text }) => apiFailure(status, text),
+      send: (id) => {
+        if (method === "GET") bridge.getWithToken!(url, token ?? "", id);
+        else bridge.post!(url, body ?? "", token ?? "", id);
+      },
     });
     return JSON.parse(raw);
   }
@@ -90,33 +89,6 @@ async function call(path: string, options: { method?: "GET" | "POST"; body?: unk
     );
   }
   return payload;
-}
-
-if (typeof window !== "undefined") {
-  const previous = window.__jvNetResolve;
-  window.__jvNetResolve = (id, ok, status, bodyText) => {
-    const entry = pending.get(id);
-    if (!entry) {
-      previous?.(id, ok, status, bodyText);
-      return;
-    }
-    pending.delete(id);
-    clearTimeout(entry.timer);
-
-    if (ok) {
-      entry.resolve(bodyText);
-      return;
-    }
-    // Le pont rend le corps de l'erreur : on y lit le message du serveur.
-    let message = status > 0 ? `Erreur ${status}.` : bodyText || "Serveur injoignable.";
-    try {
-      const parsed = JSON.parse(bodyText) as { error?: string };
-      if (parsed.error) message = parsed.error;
-    } catch {
-      /* le corps n'était pas du JSON */
-    }
-    entry.reject(new ApiError(message, status));
-  };
 }
 
 /* ------------------------------------------------------------------ session */

@@ -10,40 +10,14 @@
  * services ask to be cached — and because a cached answer is what makes the
  * destination file work in a plane.
  */
+import { bridgeRequest } from "./bridge";
 import { getDb, persistNow } from "./store";
-
-// `window.JVNet`, `window.JVPrint` et `window.__jvNetResolve` sont déclarés une
-// seule fois, dans `bridge.d.ts`.
 
 export class NetworkUnavailable extends Error {
   constructor(message = "Service injoignable.") {
     super(message);
     this.name = "NetworkUnavailable";
   }
-}
-
-interface Pending {
-  resolve: (body: string) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
-const pending = new Map<string, Pending>();
-let counter = 0;
-
-if (typeof window !== "undefined") {
-  window.__jvNetResolve = (id, ok, status, body) => {
-    const entry = pending.get(id);
-    if (!entry) return;
-    pending.delete(id);
-    clearTimeout(entry.timer);
-
-    if (!ok) {
-      entry.reject(new NetworkUnavailable(status > 0 ? `Réponse HTTP ${status}.` : body));
-      return;
-    }
-    entry.resolve(body);
-  };
 }
 
 /** True when this build can reach the network at all. */
@@ -63,16 +37,15 @@ export function setNetworkAllowed(allowed: boolean): void {
 }
 
 async function rawGet(url: string, timeoutMs = 30_000): Promise<string> {
-  if (window.JVNet) {
-    const id = `r${(counter += 1)}:${Date.now()}`;
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new NetworkUnavailable("Le service n'a pas répondu à temps."));
-      }, timeoutMs);
-
-      pending.set(id, { resolve, reject, timer });
-      window.JVNet!.get(url, id);
+  const bridge = window.JVNet;
+  if (bridge) {
+    return bridgeRequest({
+      prefix: "r",
+      timeoutMs,
+      onTimeout: () => new NetworkUnavailable("Le service n'a pas répondu à temps."),
+      onFailure: ({ status, body }) =>
+        new NetworkUnavailable(status > 0 ? `Réponse HTTP ${status}.` : body),
+      send: (id) => bridge.get(url, id),
     });
   }
 

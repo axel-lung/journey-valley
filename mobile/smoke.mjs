@@ -219,7 +219,65 @@ try {
     (await page.getByRole("button", { name: "Prix", exact: true }).count()) === 0,
   );
 
-  // 9. Et l'API elle-même ne livre rien à un jeton absent ou faux.
+  // 9. Le pont Java.
+  //
+  // Sur le téléphone, le bundle ne fait jamais de `fetch` vers le serveur : il
+  // appelle `JVNet`, et la coque répond par `window.__jvNetResolve`. Tout ce
+  // qui précède emprunte le chemin navigateur — une panne du pont y passe donc
+  // inaperçue. Ce faux pont suit Net.java à la lettre : asynchrone, un seul
+  // point de retour, `ok` vrai entre 200 et 299.
+  const bridged = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await bridged.addInitScript(() => {
+    const send = (url, init, requestId) => {
+      const answer = (ok, status, body) =>
+        setTimeout(() => window.__jvNetResolve?.(requestId, ok, status, body), 0);
+
+      fetch(url, init).then(
+        async (response) => answer(response.ok, response.status, await response.text()),
+        () => answer(false, 0, "Service injoignable."),
+      );
+    };
+
+    const headers = (token, json) => ({
+      accept: "application/json",
+      ...(json ? { "content-type": "application/json" } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    });
+
+    window.JVNet = {
+      get: (url, requestId) => send(url, { headers: headers(null, false) }, requestId),
+      getWithToken: (url, token, requestId) =>
+        send(url, { headers: headers(token, false) }, requestId),
+      post: (url, body, token, requestId) =>
+        send(url, { method: "POST", headers: headers(token, true), body }, requestId),
+    };
+  });
+
+  await bridged.goto(BASE);
+  await bridged.waitForSelector("text=Se connecter");
+  await bridged.fill('input[name="email"]', "camille@journeyvalley.app");
+  await bridged.fill('input[name="password"]', "mauvais");
+  await bridged.getByRole("button", { name: "Se connecter" }).click();
+  const refused = await bridged
+    .waitForSelector("text=E-mail ou mot de passe incorrect", { timeout: 15_000 })
+    .then(() => true, () => false);
+  check("through the bridge, a refusal carries the server's own message", refused);
+
+  await bridged.fill('input[name="password"]', "journey2026");
+  await bridged.getByRole("button", { name: "Se connecter" }).click();
+  // Plus long que les vingt secondes du client : si le pont est muet, c'est le
+  // message d'expiration qu'on veut lire, pas celui de Playwright.
+  const signedIn = await bridged
+    .waitForSelector("text=Marge nette, dossiers réservés", { timeout: 25_000 })
+    .then(() => true, () => false);
+  check(
+    "signing in and loading the portfolio work through the bridge, not only through fetch",
+    signedIn,
+    signedIn ? "" : (await bridged.locator("body").innerText()).slice(0, 200),
+  );
+  await bridged.close();
+
+  // 10. Et l'API elle-même ne livre rien à un jeton absent ou faux.
   const anonymous = await fetch(`${API}/api/mobile/home`);
   check("the API refuses a request with no token", anonymous.status === 401);
   const forged = await fetch(`${API}/api/mobile/home`, {
