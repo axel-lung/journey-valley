@@ -4,10 +4,17 @@ Suite de `analyse-produit.md`. Celui-ci ne parle pas de fonctionnalités mais de
 la seule question qui décide du reste : **à qui on vend, et sur quel
 argument.**
 
-> Correction par rapport à une première version de ce document : il proposait
-> d'entrer chez les agences déjà équipées en vendant le registre des marges
-> comme produit d'appel autonome. Cette piste est abandonnée, et la section 4
-> explique pourquoi.
+> ⚠️ **Le positionnement de ce document est dépassé.** Un nouveau cadrage
+> produit — la proposition de voyage interactive, dont l'entrée est le
+> programme déjà écrit par l'agence — lève l'obstacle décrit en section 4 et
+> ramène les agences équipées dans la cible. Voir `recadrage-proposition.md`.
+> Ce qui reste valable ici : la segmentation (§1), les besoins observés (§2) et
+> les coûts de bascule (§3).
+>
+> Correction antérieure, conservée : ce document proposait d'abord d'entrer
+> chez les agences équipées en vendant le registre des marges comme produit
+> d'appel autonome. Cette piste-là reste abandonnée, et la section 4 explique
+> pourquoi.
 
 ## 1. Le marché n'est pas homogène — et ça change tout
 

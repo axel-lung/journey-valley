@@ -3,6 +3,12 @@
 Analyse de l'existant (web, mobile, domaine) confrontée au marché francophone
 des logiciels d'agence. Classée par ce que ça coûte de ne pas l'avoir.
 
+> L'inventaire ci-dessous reste exact. En revanche, **l'ordre des priorités a
+> changé** : voir `recadrage-proposition.md`, qui recentre le produit sur la
+> proposition de voyage interactive. Plusieurs manques listés ici (facturation,
+> application mobile, espace post-vente) sortent du périmètre immédiat sans
+> disparaître.
+
 ## Ce qui est déjà un avantage
 
 Trois choses qu'aucun concurrent ne fait aussi proprement, et sur lesquelles il
