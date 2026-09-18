@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { agencyTotals, getAgency, isAdvisor, listAgencyFiles } from "./agency";
+import { listAttachments } from "./attachments-store";
 import { authenticate } from "./auth";
 import { budgetStatus } from "./budget";
 import { getDb } from "./db";
@@ -236,6 +237,12 @@ export interface MobileFileDetail extends MobileFileSummary {
     zone?: string;
   }>;
   checklist: Array<{ id: number; label: string; done: boolean }>;
+  /**
+   * Les pièces du dossier, filtrées par rôle : le voyageur ne reçoit que
+   * celles qui lui ont été remises. Le filtre est fait par `listAttachments`,
+   * pas par l'application — le téléphone n'a jamais l'occasion de se tromper.
+   */
+  documents: Array<{ id: number; name: string; size_bytes: number; content_type: string }>;
   quotes?: Array<{
     reference: string;
     status: string;
@@ -294,6 +301,12 @@ export function file(user: User, tripId: number): MobileFileDetail | null {
       id: item.id,
       label: item.label,
       done: item.done === 1,
+    })),
+    documents: listAttachments(trip.id, advisor).map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      size_bytes: attachment.size_bytes,
+      content_type: attachment.content_type,
     })),
   };
 

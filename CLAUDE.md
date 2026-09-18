@@ -49,7 +49,12 @@ du fichier qu'on modifie.
     ne lit que ce qui est déjà public — les lignes figées du devis, le montant
     de la facture, le programme. La règle tient à la signature des fonctions,
     pas à un `if`, et les tests relisent le texte du PDF pour s'en assurer.
-11. **On ne fait pas croire qu'un message est parti.** Un message est écrit
+11. **Une pièce déposée ne sort pas du dossier sans décision.** Le défaut est
+    « interne à l'agence » : une facture fournisseur porte un prix d'achat. Le
+    conseiller remet une pièce au voyageur pièce par pièce, et le filtre est
+    fait côté serveur (`listAttachments`), jamais par l'écran ni par le
+    téléphone.
+12. **On ne fait pas croire qu'un message est parti.** Un message est écrit
     dans la file avant d'être envoyé et y reste s'il échoue, avec la réponse du
     serveur telle quelle. Sans serveur configuré, l'écran le dit et le texte se
     copie — personne ne perd un devis parce qu'un réglage manquait.
@@ -59,7 +64,7 @@ du fichier qu'on modifie.
 ```
 src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
                   invoices, vat-return, budget, stages, itinerary, format,
-                  practical, agency, pdf, documents, mail
+                  practical, agency, pdf, documents, mail, attachments
                   (les modules *-store.ts portent les écritures ; le module pur
                   reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
@@ -84,8 +89,8 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 220 tests unitaires
-npm run build && npm run smoke       # 80 vérifications web bout-en-bout
+npm run typecheck && npm test        # 234 tests unitaires
+npm run build && npm run smoke       # 86 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 21 vérifications sur le bundle Android
 ```
@@ -124,7 +129,9 @@ Déploiement : `docker-compose.yml` derrière un Traefik existant (réseau exter
 `JV_PUBLIC_URL` (l'adresse publique, pour que les liens soient cliquables
 depuis une boîte mail) et `JV_SMTP_URL` (`smtps://user:pass@serveur:465`),
 avec `JV_MAIL_FROM` en option. Sans elles, les messages restent dans la file et
-l'écran le dit. Le `Dockerfile` recompile better-sqlite3 dans la base de l'image
+l'écran le dit. Les pièces déposées vivent dans `uploads/`, à côté de la base,
+pour qu'une sauvegarde du volume emporte les deux (`JV_UPLOAD_PATH` pour les
+mettre ailleurs). Le `Dockerfile` recompile better-sqlite3 dans la base de l'image
 finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
 
 ## Ce qui reste ouvert
@@ -135,8 +142,10 @@ finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
   vente réelle.
 - Pas d'encaissement : la facture suit l'acompte et le solde, l'agence encaisse
   par ses propres moyens.
-- Pas de téléversement de documents : ni voucher fournisseur, ni passeport, ni
-  justificatif de dépense (`expenses.receipt_name` garde un nom sans fichier).
+- Le téléphone liste les pièces du dossier mais ne les stocke pas : ouvrir un
+  billet hors ligne demande que la coque Java sache enregistrer un fichier.
+- `expenses.receipt_name` garde encore un nom sans fichier : les justificatifs
+  de dépense ne passent pas par les pièces du dossier.
 - Pas de Factur-X ni de raccordement à une PDP, alors que la réception devient
   obligatoire en septembre 2026 et l'émission pour les PME en septembre 2027.
 - Une seule agence par conseiller, pas de collègue à inviter.

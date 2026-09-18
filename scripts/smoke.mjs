@@ -688,6 +688,61 @@ try {
   await page.getByText("Week-end à Lisbonne").click();
   await page.waitForURL(/\/trips\/\d+$/);
   const lisbonUrl = page.url();
+
+  // 11b. Les pièces du dossier : ce que l'agence dépose, et qui a le droit de
+  // le voir. Une facture fournisseur porte un prix d'achat — elle ne sort pas.
+  const documentsForm = page.locator('form:has(input[name="file"])');
+  await documentsForm.locator('input[name="file"]').setInputFiles({
+    name: "facture-fournisseur.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n% facture d'achat\n"),
+  });
+  await documentsForm.getByRole("button", { name: "Déposer" }).click();
+  await page.waitForSelector('a[href^="/pieces/"]');
+  // Le libellé existe aussi dans la liste déroulante du formulaire : c'est la
+  // ligne de la pièce qu'on interroge, pas la page.
+  check(
+    "a purchase invoice stays internal by default",
+    await page
+      .locator("li", { hasText: "facture-fournisseur.pdf" })
+      .getByText("Interne à l'agence")
+      .isVisible(),
+  );
+
+  await documentsForm.locator('input[name="file"]').setInputFiles({
+    name: "billet-avion.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n% le billet du voyageur\n"),
+  });
+  await documentsForm.locator('select[name="visibility"]').selectOption("traveller");
+  await documentsForm.getByRole("button", { name: "Déposer" }).click();
+  await page.waitForSelector('a[href^="/pieces/"] >> nth=1');
+  check(
+    "a ticket can be handed to the traveller",
+    await page
+      .locator("li", { hasText: "billet-avion.pdf" })
+      .getByText("Remise au voyageur")
+      .isVisible(),
+  );
+
+  const internalHref = await page
+    .locator("li", { hasText: "facture-fournisseur.pdf" })
+    .first()
+    .getByRole("link")
+    .getAttribute("href");
+
+  await documentsForm.locator('input[name="file"]').setInputFiles({
+    name: "programme.html",
+    mimeType: "text/html",
+    buffer: Buffer.from("<script>alert(1)</script>"),
+  });
+  await documentsForm.getByRole("button", { name: "Déposer" }).click();
+  await page.waitForSelector("text=Formats acceptés");
+  check(
+    "a file that could execute is refused",
+    await page.getByText(/Formats acceptés/).isVisible(),
+  );
+
   await page.goto(`${lisbonUrl}/voyageurs`);
   check("shared costs produce a settlement", await page.getByText("Pour être quittes").isVisible());
   check("balances are shown per traveller", await page.getByText("Sam Ortega").first().isVisible());
@@ -731,6 +786,24 @@ try {
     !clientPage.includes("246") && !clientPage.includes("Coût") && !clientPage.includes("Marge"),
     clientPage.match(/.{0,40}(246|Coût|Marge).{0,40}/)?.[0] ?? "",
   );
+
+  check(
+    "the traveller is handed the ticket",
+    await page.getByText("billet-avion.pdf").isVisible(),
+  );
+  check(
+    "the traveller never sees the agency's own pieces",
+    !clientPage.includes("facture-fournisseur"),
+  );
+
+  // Et pas seulement à l'écran : le fichier lui-même lui est fermé.
+  const internal = await page.goto(`${BASE}${internalHref}`);
+  check(
+    "an internal piece cannot be downloaded by the traveller",
+    internal?.status() === 404,
+    `status ${internal?.status()}`,
+  );
+  await page.goBack();
 
   // Le dossier du conseiller lui est fermé : il est renvoyé vers son espace.
   const dossierUrl = page.url().replace("/mon-voyage/", "/trips/");

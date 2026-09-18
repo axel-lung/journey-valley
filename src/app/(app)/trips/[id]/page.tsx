@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
 import { isAdvisor } from "@/lib/agency";
+import { listAttachments } from "@/lib/attachments-store";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -10,6 +11,7 @@ import type { BookingType } from "@/lib/types";
 import { deleteBookingAction } from "../actions";
 import { BookingForm } from "./booking-form";
 import { Checklist } from "./checklist";
+import { DocumentsCard } from "./documents-card";
 import { ItineraryCard } from "./itinerary-card";
 
 export const dynamic = "force-dynamic";
@@ -129,6 +131,8 @@ export default async function ProgrammePage({ params }: { params: Promise<{ id: 
         )}
       </Card>
 
+
+      <DocumentsCard tripId={trip.id} attachments={listAttachments(trip.id, true)} />
 
       <Checklist tripId={trip.id} items={checklist} editable={editable} />
     </div>

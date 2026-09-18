@@ -218,6 +218,12 @@ export interface FileDetail extends FileSummary {
     zone?: string;
   }>;
   checklist: Array<{ id: number; label: string; done: boolean }>;
+  /**
+   * Filtrées par rôle côté serveur : le voyageur n'y voit que ce qui lui est
+   * remis. Optionnel, parce qu'une application installée peut interroger un
+   * serveur plus ancien qu'elle.
+   */
+  documents?: Array<{ id: number; name: string; size_bytes: number; content_type: string }>;
   quotes?: Array<{
     reference: string;
     status: string;

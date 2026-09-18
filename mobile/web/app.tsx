@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { formatDate, formatDateRange, initials } from "../../src/lib/format";
 import { formatMoney } from "../../src/lib/money";
+import { formatBytes } from "../../src/lib/attachments";
 import {
   ApiError,
   fetchFile,
@@ -733,6 +734,11 @@ function Documents({
     ),
   ].join("\n");
 
+  // Un téléphone peut parler à un serveur plus ancien que lui : un champ qu'il
+  // ne connaît pas encore arrive absent, et l'écran ne doit pas s'effondrer
+  // pour autant.
+  const documents = file.documents ?? [];
+
   return (
     <div className="space-y-4">
       <Card title={`Réservations (${file.bookings.length})`}>
@@ -755,6 +761,24 @@ function Documents({
           </ul>
         )}
       </Card>
+
+      {documents.length > 0 && (
+        <Card title={`Pièces (${documents.length})`}>
+          <ul className="divide-y divide-stone-100">
+            {documents.map((document) => (
+              <li key={document.id} className="px-4 py-3">
+                <p className="font-medium text-stone-900">{document.name}</p>
+                <p className="text-xs text-stone-500">{formatBytes(document.size_bytes)}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-stone-100 px-4 py-3 text-xs leading-relaxed text-stone-500">
+            {advisor
+              ? "Les pièces du dossier se déposent et se téléchargent depuis le site."
+              : "Téléchargez-les depuis votre espace avant de partir : l'application les liste, elle ne les stocke pas encore."}
+          </p>
+        </Card>
+      )}
 
       {file.checklist.length > 0 && (
         <Card title="Avant de partir">

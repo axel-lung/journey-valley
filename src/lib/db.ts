@@ -271,6 +271,22 @@ export function migrate(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Les pièces d'un dossier. Les octets vivent sur le disque, sous un nom
+    -- que le produit choisit ; la base ne garde que ce qu'on affiche, et la
+    -- visibilité, qui décide si le voyageur y a droit.
+    CREATE TABLE IF NOT EXISTS attachments (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id      INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+      uploaded_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name         TEXT NOT NULL,
+      stored_name  TEXT NOT NULL UNIQUE,
+      content_type TEXT NOT NULL,
+      size_bytes   INTEGER NOT NULL DEFAULT 0,
+      visibility   TEXT NOT NULL DEFAULT 'agency'
+                   CHECK (visibility IN ('agency','traveller')),
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS activity_log (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       trip_id    INTEGER REFERENCES trips(id) ON DELETE CASCADE,
@@ -298,6 +314,7 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_agency ON messages(agency_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status, created_at);
     CREATE INDEX IF NOT EXISTS idx_tokens_user ON access_tokens(user_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_attachments_trip ON attachments(trip_id, created_at DESC);
   `);
 
   // Columns added after the first release. `CREATE TABLE IF NOT EXISTS` leaves

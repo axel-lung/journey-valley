@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Badge, Card, EmptyState, StatTile } from "@/components/ui";
 import { getAgency, isAdvisor } from "@/lib/agency";
+import { formatBytes } from "@/lib/attachments";
+import { listAttachments } from "@/lib/attachments-store";
 import { requireUser } from "@/lib/auth";
 import { tripNights } from "@/lib/budget";
 import { coverStyle } from "@/lib/cover";
@@ -42,6 +44,9 @@ export default async function MyTripPage({ params }: { params: Promise<{ id: str
   const members = listMembers(trip.id);
   const bookings = listBookings(trip.id);
   const checklist = listChecklist(trip.id);
+  // `false` : ce voyageur n'est pas conseiller, donc il ne reçoit que les
+  // pièces qui lui ont été remises — jamais une facture fournisseur.
+  const documents = listAttachments(trip.id, false);
   const itinerary = buildItinerary(trip, bookings, []);
   const when = countdown(trip.start_date, trip.end_date);
   const agency = getAgency(user.agency_id);
@@ -159,6 +164,32 @@ export default async function MyTripPage({ params }: { params: Promise<{ id: str
       <Suspense fallback={<DossierSkeleton city={trip.destination_city} />}>
         <DossierCard trip={trip} currency={trip.currency} />
       </Suspense>
+
+      {documents.length > 0 && (
+        <Card title="Vos documents">
+          <ul className="divide-y divide-stone-100">
+            {documents.map((document) => (
+              <li key={document.id} className="flex items-center gap-3 px-5 py-3">
+                <a
+                  href={`/pieces/${document.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 font-medium text-stone-900 hover:underline"
+                >
+                  {document.name}
+                </a>
+                <span className="shrink-0 text-xs text-stone-500">
+                  {formatBytes(document.size_bytes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-stone-100 px-5 py-3 text-xs text-stone-500">
+            Billets, vouchers et attestations remis par votre conseiller. Téléchargez-les avant de
+            partir : vous les aurez même sans réseau.
+          </p>
+        </Card>
+      )}
 
       {checklist.length > 0 && (
         <Card title="Avant de partir">
