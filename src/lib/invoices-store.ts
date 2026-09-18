@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./db";
 import type { Invoice, InvoiceKind } from "./invoices";
+import { getAgency, getClient } from "./agency";
+import { facturXml, missingForFacturX } from "./facturx";
+import { getTrip, listBookings } from "./trips";
+import { costsByZone } from "./vat";
 
 /**
  * La persistance des factures. Séparée de `invoices.ts`, qui reste pur pour
@@ -102,4 +106,32 @@ export function cancel(invoiceId: number): void {
     return;
   }
   db.prepare(`UPDATE invoices SET status = 'cancelled' WHERE id = ?`).run(invoiceId);
+}
+
+/* ------------------------------------------------------- facture électronique */
+
+/**
+ * La version structurée d'une facture, ou `null` quand l'agence n'a pas de
+ * quoi l'émettre.
+ *
+ * Renvoyer `null` plutôt que produire un fichier incomplet est délibéré : un
+ * XML sans SIRET ni numéro de TVA est rejeté par la plateforme, et un fichier
+ * rejeté coûte plus cher qu'un fichier absent. `missingForFacturX` dit ce qui
+ * manque, et l'écran le reprend.
+ */
+export function facturXFor(invoice: Invoice): string | null {
+  const trip = getTrip(invoice.trip_id);
+  const agency = getAgency(invoice.agency_id);
+  if (!trip || !agency) return null;
+  if (missingForFacturX(agency).length > 0) return null;
+
+  const client = trip.client_id ? getClient(invoice.agency_id, trip.client_id) : null;
+
+  return facturXml({
+    invoice,
+    trip,
+    agency,
+    buyer: client ? { name: client.name, email: client.email } : null,
+    zones: costsByZone(listBookings(trip.id)),
+  });
 }

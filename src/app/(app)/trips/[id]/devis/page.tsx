@@ -5,6 +5,7 @@ import { Badge, Card, EmptyState } from "@/components/ui";
 import { getAgency, getClient, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
+import { missingForFacturX } from "@/lib/facturx";
 import { checkCompliance } from "@/lib/legal";
 import { formatMoney } from "@/lib/money";
 import {
@@ -225,6 +226,7 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
           invoices={invoices}
           billing={billing}
           suggestions={suggestions}
+          facturXMissing={missingForFacturX(agency)}
           currency={currency}
         />
       </Card>

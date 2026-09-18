@@ -54,7 +54,12 @@ du fichier qu'on modifie.
     conseiller remet une pièce au voyageur pièce par pièce, et le filtre est
     fait côté serveur (`listAttachments`), jamais par l'écran ni par le
     téléphone.
-12. **On ne fait pas croire qu'un message est parti.** Un message est écrit
+12. **La facture structurée code le régime, elle ne le chiffre pas.**
+    Dans le XML Factur-X : catégorie `E`, taux `0`, taxe `0`, base imposable
+    égale au **prix total** — jamais la marge — et le motif codé
+    (`VATEX-EU-306`, ou `-309` quand tout est exécuté hors de l'Union). Le
+    fichier part chez le client : la règle 10 y vaut mot pour mot.
+13. **On ne fait pas croire qu'un message est parti.** Un message est écrit
     dans la file avant d'être envoyé et y reste s'il échoue, avec la réponse du
     serveur telle quelle. Sans serveur configuré, l'écran le dit et le texte se
     copie — personne ne perd un devis parce qu'un réglage manquait.
@@ -64,7 +69,8 @@ du fichier qu'on modifie.
 ```
 src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
                   invoices, vat-return, budget, stages, itinerary, format,
-                  practical, agency, pdf, documents, mail, attachments
+                  practical, agency, pdf, documents, facturx, mail,
+                  attachments
                   (les modules *-store.ts portent les écritures ; le module pur
                   reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
@@ -89,8 +95,8 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 234 tests unitaires
-npm run build && npm run smoke       # 86 vérifications web bout-en-bout
+npm run typecheck && npm test        # 263 tests unitaires
+npm run build && npm run smoke       # 92 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 21 vérifications sur le bundle Android
 ```
@@ -117,6 +123,8 @@ Mot de passe commun : `journey2026`.
 - **Le dialogue SMTP n'est pas couvert par les tests** et ne peut pas l'être
   ici : ce qui est pur (composition du message, lecture de `JV_SMTP_URL`) l'est,
   la socket se vérifie contre un vrai serveur à la première configuration.
+- **Pas de validateur Factur-X non plus** (ni Mustang, ni veraPDF) : le XML est
+  vérifié nœud par nœud par ses tests, pas contre le schéma officiel.
 - **Pas de SDK Android Google.** L'APK se construit avec `aapt`,
   `dalvik-exchange`, `zipalign`, `apksigner` et `android-sdk-platform-23`.
 - `JV_SERVER_URL` fixe l'adresse du serveur dans l'APK, côté bundle *et* côté
@@ -146,8 +154,16 @@ finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
   billet hors ligne demande que la coque Java sache enregistrer un fichier.
 - `expenses.receipt_name` garde encore un nom sans fichier : les justificatifs
   de dépense ne passent pas par les pièces du dossier.
-- Pas de Factur-X ni de raccordement à une PDP, alors que la réception devient
-  obligatoire en septembre 2026 et l'émission pour les PME en septembre 2027.
+- Le PDF de facture porte son XML Factur-X, mais **n'est pas encore un
+  PDF/A-3** et ne le prétend pas : il y manque l'incorporation des polices, un
+  profil colorimétrique de sortie et l'identification `pdfaid`. Le XML seul se
+  télécharge et se dépose, lui, tel quel.
+- Les codes VATEX ont été établis d'après la documentation publique de la norme,
+  sans accès à la liste officielle depuis cette machine : à confronter à la
+  liste de la Commission et à valider contre la plateforme retenue avant la
+  première émission réelle.
+- Pas de raccordement à une PDP : le fichier est produit, son dépôt reste à
+  brancher.
 - Une seule agence par conseiller, pas de collègue à inviter.
 - L'offre agence existe dans `plans.ts`, mais rien ne facture l'abonnement.
 - Le téléphone lit, il n'écrit pas.

@@ -23,14 +23,16 @@ export function seedIfEmpty(db: Database.Database): void {
     const agencyId = Number(
       db
         .prepare(
-          `INSERT INTO agencies (name, legal_name, registration, email, phone, website,
-                                 target_margin_percent, currency)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR')`,
+          `INSERT INTO agencies (name, legal_name, registration, vat_number, siret, email, phone,
+                                 website, target_margin_percent, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EUR')`,
         )
         .run(
           "Escale Voyages",
           "Escale Voyages SARL",
           "IM069250014",
+          "FR69880123456",
+          "88012345600017",
           "bonjour@escale-voyages.fr",
           "04 72 00 00 00",
           "escale-voyages.fr",

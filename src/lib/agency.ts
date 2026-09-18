@@ -34,6 +34,8 @@ const PATCHABLE = [
   "name",
   "legal_name",
   "registration",
+  "vat_number",
+  "siret",
   "email",
   "phone",
   "website",

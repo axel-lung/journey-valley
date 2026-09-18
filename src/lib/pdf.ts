@@ -213,6 +213,13 @@ export function parseColour(hex: string): Rgb {
 
 /* --------------------------------------------------------------- writing */
 
+/** `text/xml` → `/text#2Fxml`: a PDF name escapes what it cannot spell. */
+function nameLiteral(value: string): string {
+  return `/${value.replace(/[^A-Za-z0-9._-]/g, (char) =>
+    `#${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`,
+  )}`;
+}
+
 function escapeForPdf(bytes: number[]): string {
   let out = "";
   for (const byte of bytes) {
@@ -239,14 +246,58 @@ export interface TextOptions {
  * origin bottom-left — but `y` here counts from the top, because that is how
  * the layout reads.
  */
+/**
+ * A file carried inside the document.
+ *
+ * This is how a hybrid invoice works: the PDF a person reads, with the
+ * machine-readable version attached to it. `documents.ts` uses it to carry the
+ * Factur-X XML; nothing here knows what the payload means.
+ */
+export interface Attachment {
+  /** The name the reader shows, and the one the specification may impose. */
+  name: string;
+  /** Media type of the payload, e.g. `text/xml`. */
+  contentType: string;
+  /** What the file is for, shown in a reader's attachment pane. */
+  description: string;
+  /**
+   * How the attachment relates to the page. `Alternative` says the two carry
+   * the same content in two forms — what a complete hybrid invoice declares.
+   */
+  relationship: "Alternative" | "Data" | "Source" | "Supplement";
+  text: string;
+}
+
+/**
+ * Metadata a processor reads without opening the page.
+ *
+ * Deliberately not claiming PDF/A conformance: see `build()`.
+ */
+export interface XmpFacturX {
+  documentType: string;
+  fileName: string;
+  version: string;
+  conformanceLevel: string;
+}
+
 export class PdfDocument {
   private pages: string[] = [];
   private current: string[] = [];
   private cursor = MARGIN;
   private readonly footerText: string;
+  private readonly title: string;
+  private attachment: Attachment | null = null;
+  private facturX: XmpFacturX | null = null;
 
-  constructor(options: { footer?: string } = {}) {
+  constructor(options: { footer?: string; title?: string } = {}) {
     this.footerText = options.footer ?? "";
+    this.title = options.title ?? "";
+  }
+
+  /** Carries a file inside the document, with the metadata that announces it. */
+  attach(attachment: Attachment, facturX: XmpFacturX | null = null): void {
+    this.attachment = attachment;
+    this.facturX = facturX;
   }
 
   /** Distance from the top of the page to the writing cursor. */
@@ -393,7 +444,24 @@ export class PdfDocument {
     // 1 catalog, 2 pages, 3 regular font, 4 bold font, then a pair per page.
     for (let index = 0; index < pageCount; index += 1) pageIds.push(5 + index * 2);
 
-    objects[0] = `<< /Type /Catalog /Pages 2 0 R >>`;
+    // Anything the attachment needs comes after the pages, so page numbering
+    // stays the simple arithmetic above.
+    const nextId = 5 + pageCount * 2;
+    const embeddedId = this.attachment ? nextId : 0;
+    const filespecId = this.attachment ? nextId + 1 : 0;
+    const metadataId = this.attachment || this.title ? nextId + (this.attachment ? 2 : 0) : 0;
+
+    const catalogExtras = [
+      this.attachment
+        ? `/Names << /EmbeddedFiles << /Names [(${escapeForPdf(encodeWinAnsi(this.attachment.name))}) ${filespecId} 0 R] >> >>`
+        : "",
+      this.attachment ? `/AF [${filespecId} 0 R]` : "",
+      metadataId ? `/Metadata ${metadataId} 0 R` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    objects[0] = `<< /Type /Catalog /Pages 2 0 R${catalogExtras ? ` ${catalogExtras}` : ""} >>`;
     objects[1] =
       `<< /Type /Pages /Count ${pageCount} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`;
     objects[2] =
@@ -413,6 +481,28 @@ export class PdfDocument {
       objects[streamId - 1] =
         `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`;
     });
+
+    if (this.attachment) {
+      // The payload is UTF-8; the file is assembled as latin1, so its bytes are
+      // carried through a latin1 string rather than re-encoded.
+      const payload = Buffer.from(this.attachment.text, "utf8").toString("latin1");
+      objects[embeddedId - 1] =
+        `<< /Type /EmbeddedFile /Subtype ${nameLiteral(this.attachment.contentType)} ` +
+        `/Params << /Size ${payload.length} >> /Length ${payload.length} >>\n` +
+        `stream\n${payload}\nendstream`;
+      objects[filespecId - 1] =
+        `<< /Type /Filespec /F (${escapeForPdf(encodeWinAnsi(this.attachment.name))}) ` +
+        `/UF (${escapeForPdf(encodeWinAnsi(this.attachment.name))}) ` +
+        `/Desc (${escapeForPdf(encodeWinAnsi(this.attachment.description))}) ` +
+        `/AFRelationship /${this.attachment.relationship} ` +
+        `/EF << /F ${embeddedId} 0 R >> >>`;
+    }
+
+    if (metadataId) {
+      const xmp = Buffer.from(this.xmpPacket(), "utf8").toString("latin1");
+      objects[metadataId - 1] =
+        `<< /Type /Metadata /Subtype /XML /Length ${xmp.length} >>\nstream\n${xmp}\nendstream`;
+    }
 
     let file = "%PDF-1.4\n";
     const offsets: number[] = [];
@@ -434,6 +524,66 @@ export class PdfDocument {
     const bytes = new Uint8Array(new ArrayBuffer(source.byteLength));
     bytes.set(source);
     return bytes;
+  }
+
+  /**
+   * The XMP packet.
+   *
+   * It announces the attached invoice the way a Factur-X reader expects —
+   * document type, file name, version, conformance level — through the
+   * extension schema the specification defines.
+   *
+   * **It deliberately does not claim PDF/A-3 conformance.** Claiming `pdfaid`
+   * without meeting the rest (every font embedded, an ICC output intent, a
+   * document ID) would be a false statement inside a document that is meant to
+   * be relied upon. What is missing is written down in `documents.ts`; until
+   * then the file is a hybrid invoice carrying a valid EN 16931 payload, and
+   * says no more than that.
+   */
+  private xmpPacket(): string {
+    const escape = (value: string) =>
+      value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const factur = this.facturX
+      ? `
+  <rdf:Description rdf:about="" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+   <fx:DocumentType>${escape(this.facturX.documentType)}</fx:DocumentType>
+   <fx:DocumentFileName>${escape(this.facturX.fileName)}</fx:DocumentFileName>
+   <fx:Version>${escape(this.facturX.version)}</fx:Version>
+   <fx:ConformanceLevel>${escape(this.facturX.conformanceLevel)}</fx:ConformanceLevel>
+  </rdf:Description>
+  <rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
+   <pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">
+    <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>
+    <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>
+    <pdfaSchema:prefix>fx</pdfaSchema:prefix>
+    <pdfaSchema:property><rdf:Seq>${["DocumentType", "DocumentFileName", "Version", "ConformanceLevel"]
+      .map(
+        (name) =>
+          `\n     <rdf:li rdf:parseType="Resource"><pdfaProperty:name>${name}</pdfaProperty:name>` +
+          `<pdfaProperty:valueType>Text</pdfaProperty:valueType>` +
+          `<pdfaProperty:category>external</pdfaProperty:category>` +
+          `<pdfaProperty:description>${name}</pdfaProperty:description></rdf:li>`,
+      )
+      .join("")}
+    </rdf:Seq></pdfaSchema:property>
+   </rdf:li></rdf:Bag></pdfaExtension:schemas>
+  </rdf:Description>`
+      : "";
+
+    const title = this.title
+      ? `
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">${escape(this.title)}</rdf:li></rdf:Alt></dc:title>
+  </rdf:Description>`
+      : "";
+
+    return `<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">${title}${factur}
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`;
   }
 
   /** `Devis DEV-2026-0001 · 2 / 3`, drawn below the bottom margin. */

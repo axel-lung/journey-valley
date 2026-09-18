@@ -73,6 +73,16 @@ export function legalMentions(agency: Agency | null): LegalMention[] {
       missing: !value(agency?.registration),
       why: "Obligatoire pour vendre des voyages (art. L211-18 du code du tourisme) ; le numéro IM doit figurer sur les documents commerciaux.",
     },
+    ...(agency?.vat_on_margin === 0
+      ? []
+      : [
+          {
+            label: "TVA intracommunautaire",
+            value: value(agency?.vat_number),
+            missing: !value(agency?.vat_number),
+            why: "Obligatoire sur une facture dès lors que l'agence est assujettie ; c'est aussi l'identifiant que la facture électronique exige du vendeur.",
+          },
+        ]),
     {
       label: "Garantie financière",
       value: value(agency?.financial_guarantee),

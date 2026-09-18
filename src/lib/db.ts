@@ -341,6 +341,12 @@ export function migrate(db: Database.Database): void {
   addColumn(db, "agencies", "mediator", "TEXT NOT NULL DEFAULT ''");
   addColumn(db, "agencies", "terms", "TEXT NOT NULL DEFAULT ''");
 
+  // Ce qu'une facture française doit porter, et que la version grand public
+  // n'avait jamais eu à demander. Le numéro de TVA devient indispensable avec
+  // la facture électronique : sans lui, le XML est rejeté.
+  addColumn(db, "agencies", "vat_number", "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, "agencies", "siret", "TEXT NOT NULL DEFAULT ''");
+
   // Savoir si le client a ouvert le devis change la relance : c'est la
   // première chose qu'un conseiller demande, et jusqu'ici on ne la savait pas.
   addColumn(db, "quotes", "opened_at", "TEXT");

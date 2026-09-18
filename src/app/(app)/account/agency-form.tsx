@@ -48,6 +48,28 @@ export function AgencyForm({ agency }: { agency: Agency }) {
         />
       </Field>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Numéro de TVA intracommunautaire"
+          hint="Obligatoire sur vos factures, et sans lui la facture électronique est rejetée. Laissez vide en franchise en base."
+        >
+          <input
+            name="vat_number"
+            placeholder="FR12345678901"
+            defaultValue={agency.vat_number}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="SIRET" hint="Il identifie votre établissement auprès des plateformes.">
+          <input
+            name="siret"
+            placeholder="12345678900012"
+            defaultValue={agency.siret}
+            className={inputClass}
+          />
+        </Field>
+      </div>
+
       <Field
         label="Garantie financière"
         hint="Le garant et son adresse : c'est lui qui rembourse les fonds en cas de défaillance. Le formulaire d'information standardisé doit le nommer."

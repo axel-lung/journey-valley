@@ -35,6 +35,7 @@ export function InvoicesCard({
   billing,
   suggestions,
   currency,
+  facturXMissing,
 }: {
   tripId: number;
   quoteId: number | null;
@@ -42,6 +43,8 @@ export function InvoicesCard({
   billing: Billing;
   suggestions: Record<InvoiceKind, number>;
   currency: Currency;
+  /** Ce qui manque à l'agence pour émettre au format structuré ; vide si prête. */
+  facturXMissing: string[];
 }) {
   const [state, action] = useActionState<QuoteFormState, FormData>(createInvoiceAction, {});
   const [kind, setKind] = useState<InvoiceKind>(
@@ -67,6 +70,15 @@ export function InvoicesCard({
           </div>
         ))}
       </dl>
+
+      {facturXMissing.length > 0 && (
+        <p className="border-b border-stone-100 bg-amber-50 px-5 py-2.5 text-sm leading-relaxed text-amber-800">
+          Vos factures ne portent pas encore leur version structurée : il manque{" "}
+          {facturXMissing.join(", ")} dans les réglages de votre agence. La réception d'une facture
+          électronique est obligatoire depuis septembre 2026, et son émission le sera pour les PME
+          en septembre 2027.
+        </p>
+      )}
 
       {billing.outstanding_cents > 0 && (
         <p className="border-b border-stone-100 bg-amber-50 px-5 py-2.5 text-sm text-amber-800">
@@ -128,6 +140,14 @@ export function InvoicesCard({
                     className={secondaryButtonClass}
                   >
                     PDF
+                  </a>
+                )}
+                {invoice.status !== "draft" && facturXMissing.length === 0 && (
+                  <a
+                    href={`/facture/${invoice.token}/facturx.xml`}
+                    className={secondaryButtonClass}
+                  >
+                    XML
                   </a>
                 )}
                 {invoice.status === "draft" && (

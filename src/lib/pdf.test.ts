@@ -140,6 +140,91 @@ describe("PdfDocument", () => {
     expect(read(doc.build())).toContain("(Forfait \\(tout compris\\) \\\\ garanti) Tj");
   });
 
+  it("carries an attached file, and points the catalogue at it", () => {
+    const doc = new PdfDocument({ title: "Acompte FAC-2026-0001" });
+    doc.text("Acompte FAC-2026-0001");
+    doc.attach(
+      {
+        name: "factur-x.xml",
+        contentType: "text/xml",
+        description: "Facture électronique",
+        relationship: "Alternative",
+        text: "<invoice>été</invoice>",
+      },
+      {
+        documentType: "INVOICE",
+        fileName: "factur-x.xml",
+        version: "1.0",
+        conformanceLevel: "BASIC",
+      },
+    );
+    const file = read(doc.build());
+
+    // The three places a reader looks: the name tree, the associated-files
+    // array, and the file specification itself.
+    expect(file).toContain("/EmbeddedFiles << /Names [(factur-x.xml)");
+    expect(file).toMatch(/\/AF \[\d+ 0 R\]/);
+    expect(file).toContain("/AFRelationship /Alternative");
+    expect(file).toContain("/Type /EmbeddedFile /Subtype /text#2Fxml");
+  });
+
+  it("stores the payload's own bytes, not a re-encoding of them", () => {
+    const doc = new PdfDocument();
+    doc.text("x");
+    const payload = "<invoice>été</invoice>";
+    doc.attach({
+      name: "factur-x.xml",
+      contentType: "text/xml",
+      description: "d",
+      relationship: "Alternative",
+      text: payload,
+    });
+    const file = read(doc.build());
+
+    const stream = /\/Type \/EmbeddedFile[\s\S]*?stream\n([\s\S]*?)\nendstream/.exec(file)![1];
+    expect(Buffer.from(stream, "latin1").toString("utf8")).toBe(payload);
+
+    const declared = Number(/\/Params << \/Size (\d+) >>/.exec(file)![1]);
+    expect(declared).toBe(Buffer.byteLength(payload, "utf8"));
+  });
+
+  it("announces the attachment in its metadata without claiming PDF/A", () => {
+    const doc = new PdfDocument({ title: "Acompte" });
+    doc.text("x");
+    doc.attach(
+      {
+        name: "factur-x.xml",
+        contentType: "text/xml",
+        description: "d",
+        relationship: "Alternative",
+        text: "<x/>",
+      },
+      {
+        documentType: "INVOICE",
+        fileName: "factur-x.xml",
+        version: "1.0",
+        conformanceLevel: "BASIC",
+      },
+    );
+    const file = read(doc.build());
+
+    expect(file).toContain("/Type /Metadata /Subtype /XML");
+    expect(file).toContain("<fx:ConformanceLevel>BASIC</fx:ConformanceLevel>");
+    expect(file).toContain("urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#");
+
+    // Claiming conformance we do not meet would be a false statement inside a
+    // document meant to be relied upon.
+    expect(file).not.toContain("pdfaid:part");
+  });
+
+  it("stays a plain document when nothing is attached", () => {
+    const doc = new PdfDocument();
+    doc.text("x");
+    const file = read(doc.build());
+    expect(file).not.toContain("/EmbeddedFiles");
+    expect(file).not.toContain("/AF [");
+  });
+
   it("puts an amount at the right margin, level with the label's first line", () => {
     const doc = new PdfDocument();
     const before = doc.y;

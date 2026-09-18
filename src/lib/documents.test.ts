@@ -50,6 +50,8 @@ const agency: Agency = {
   name: "Escale Voyages",
   legal_name: "Escale Voyages SARL",
   registration: "IM075260001",
+  vat_number: "FR12345678901",
+  siret: "12345678900012",
   email: "contact@escale.fr",
   phone: "01 23 45 67 89",
   website: "escale.fr",
@@ -238,6 +240,29 @@ describe("invoicePdf", () => {
     expect(text).toContain("Sam Ortega");
     expect(text).toContain("FAC-2026-0001");
     expect(text).toMatch(/1 ?194/);
+  });
+
+  it("porte sa version structurée en pièce jointe quand on la lui donne", () => {
+    const bytes = invoicePdf({
+      invoice,
+      trip,
+      agency,
+      billTo: null,
+      facturX: "<rsm:CrossIndustryInvoice>test</rsm:CrossIndustryInvoice>",
+    });
+    const file = Buffer.from(bytes).toString("latin1");
+
+    expect(file).toContain("/EmbeddedFiles << /Names [(factur-x.xml)");
+    expect(file).toContain("<fx:ConformanceLevel>BASIC</fx:ConformanceLevel>");
+    // Et le document le dit, pour que le client sache ce qu'il a entre les mains.
+    expect(textOf(bytes)).toContain("factur-x.xml");
+  });
+
+  it("reste une facture ordinaire quand l'agence ne peut pas encore émettre", () => {
+    const file = Buffer.from(
+      invoicePdf({ invoice, trip, agency, billTo: null, facturX: null }),
+    ).toString("latin1");
+    expect(file).not.toContain("/EmbeddedFiles");
   });
 
   it("dit qu'un brouillon n'est pas émis", () => {

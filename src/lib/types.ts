@@ -52,6 +52,10 @@ export interface Agency {
   legal_name: string;
   /** Immatriculation Atout France (IM0…), printed on every quote. */
   registration: string;
+  /** Numéro de TVA intracommunautaire (FR…) ; vide en franchise en base. */
+  vat_number: string;
+  /** SIRET de l'établissement, identifiant du vendeur en facture électronique. */
+  siret: string;
   email: string;
   phone: string;
   website: string;

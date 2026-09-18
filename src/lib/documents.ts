@@ -13,6 +13,7 @@ import { formatDate, formatDateRange, formatNights, formatTravellers } from "./f
 import { formatMoney, type Currency } from "./money";
 import { INVOICE_KIND_LABEL, MARGIN_SCHEME_MENTION, type Invoice } from "./invoices";
 import { legalMentions, STANDARD_FORM_SOURCE, TRAVELLER_RIGHTS } from "./legal";
+import { ATTACHMENT_NAME, CONFORMANCE_LEVEL } from "./facturx";
 import { depositCents, type Quote, type QuoteLine } from "./quotes";
 import { buildItinerary } from "./itinerary";
 import { tripNights } from "./budget";
@@ -291,6 +292,21 @@ export interface InvoiceDocumentInput {
   agency: Letterhead;
   /** À qui la facture est adressée ; vide quand le dossier n'est rattaché à personne. */
   billTo: { name: string; email: string } | null;
+  /**
+   * Le XML Factur-X à joindre, quand l'agence a de quoi l'émettre.
+   *
+   * La facture devient alors **hybride** : la page qu'une personne lit, et la
+   * version que la machine lit, dans le même fichier. C'est la forme que la
+   * réforme de la facturation électronique attend.
+   *
+   * ⚠️ Ce que le fichier produit **n'est pas encore un PDF/A-3**, et ne le
+   * prétend pas : il y manque l'incorporation des polices, un profil
+   * colorimétrique de sortie et l'identification `pdfaid`. Le XML, lui, est
+   * complet et se télécharge aussi seul — c'est lui que lit un comptable ou
+   * une plateforme. La conformité PDF/A reste à faire avant de déposer sur une
+   * plateforme qui la valide.
+   */
+  facturX?: string | null;
 }
 
 /**
@@ -302,7 +318,30 @@ export interface InvoiceDocumentInput {
 export function invoicePdf(input: InvoiceDocumentInput): Uint8Array<ArrayBuffer> {
   const { invoice, trip, agency, billTo } = input;
   const currency = trip.currency as Currency;
-  const doc = new PdfDocument({ footer: `${INVOICE_KIND_LABEL[invoice.kind]} ${invoice.reference}` });
+  const doc = new PdfDocument({
+    footer: `${INVOICE_KIND_LABEL[invoice.kind]} ${invoice.reference}`,
+    title: `${INVOICE_KIND_LABEL[invoice.kind]} ${invoice.reference} — ${trip.title}`,
+  });
+
+  if (input.facturX) {
+    doc.attach(
+      {
+        name: ATTACHMENT_NAME,
+        contentType: "text/xml",
+        description: "Facture électronique au format Factur-X (EN 16931)",
+        // Les deux formes portent la même facture, ce que la spécification
+        // appelle « Alternative ».
+        relationship: "Alternative",
+        text: input.facturX,
+      },
+      {
+        documentType: "INVOICE",
+        fileName: ATTACHMENT_NAME,
+        version: "1.0",
+        conformanceLevel: CONFORMANCE_LEVEL,
+      },
+    );
+  }
 
   letterhead(doc, agency, {
     title: INVOICE_KIND_LABEL[invoice.kind],
@@ -382,6 +421,15 @@ export function invoicePdf(input: InvoiceDocumentInput): Uint8Array<ArrayBuffer>
     doc.move(10);
     doc.text("Règlement", { font: "bold", size: 9 });
     doc.paragraph(invoice.payment_note, { size: 9, colour: GREY });
+  }
+
+  if (input.facturX) {
+    doc.move(8);
+    doc.paragraph(
+      `Cette facture porte sa version structurée (${ATTACHMENT_NAME}, Factur-X ` +
+        `${CONFORMANCE_LEVEL}) en pièce jointe, pour votre comptabilité.`,
+      { size: 8, colour: GREY },
+    );
   }
 
   legalFooter(doc, agency);

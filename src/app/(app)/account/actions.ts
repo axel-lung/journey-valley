@@ -63,6 +63,8 @@ const agencySchema = z.object({
   name: z.string().trim().min(2, "Le nom de l'agence est un peu court."),
   legal_name: z.string().trim().max(160).default(""),
   registration: z.string().trim().max(40).default(""),
+  vat_number: z.string().trim().max(20).default(""),
+  siret: z.string().trim().max(20).default(""),
   email: z.union([z.literal(""), z.email("Cette adresse e-mail n'est pas valide.")]).default(""),
   phone: z.string().trim().max(30).default(""),
   financial_guarantee: z.string().trim().max(200).default(""),

@@ -409,6 +409,10 @@ try {
   // On complète la fiche agence, puis le devis devient présentable.
   await page.goto(`${BASE}/account`);
   await page.fill('input[name="registration"]', "IM069250014");
+  // Le numéro de TVA et le SIRET ne sont pas décoratifs : sans eux la facture
+  // électronique est rejetée, et l'écran refuse d'en produire une.
+  await page.fill('input[name="vat_number"]', "FR69880123456");
+  await page.fill('input[name="siret"]', "88012345600017");
   await page.fill('input[name="financial_guarantee"]', "APST, 15 avenue Carnot, 75017 Paris");
   await page.fill('input[name="liability_insurance"]', "Allianz — contrat n° 123456");
   await page.fill('input[name="legal_name"]', "Agence Témoin SARL");
@@ -536,11 +540,54 @@ try {
     invoiceText.match(/.{0,40}(TVA\s*:|20 %).{0,40}/)?.[0] ?? "",
   );
 
+  // 6c bis. La facture électronique : le XML que lira une plateforme, et le
+  // même XML attaché au PDF. Le régime de la marge s'y code, il ne s'y chiffre
+  // pas.
+  // Le fichier se télécharge : `goto` déclencherait un téléchargement plutôt
+  // qu'une navigation, donc on le lit depuis la page.
+  const xmlFetch = await client.evaluate(async (url) => {
+    const response = await fetch(url, { credentials: "include" });
+    return { status: response.status, body: await response.text() };
+  }, `${BASE}${invoiceHref}/facturx.xml`);
+  const facturX = xmlFetch.body;
+  check("the invoice is served as EN 16931 XML", xmlFetch.status === 200, `status ${xmlFetch.status}`);
+  check(
+    "the XML declares the Factur-X profile",
+    facturX.includes("urn:factur-x.eu:1p0:basic"),
+  );
+  check(
+    "the XML codes the margin scheme rather than charging VAT",
+    facturX.includes("<ram:CategoryCode>E</ram:CategoryCode>") &&
+      facturX.includes("<ram:ExemptionReasonCode>VATEX-EU-306</ram:ExemptionReasonCode>") &&
+      facturX.includes("<ram:CalculatedAmount>0.00</ram:CalculatedAmount>"),
+  );
+  check(
+    "the XML declares the whole price as the basis, never the margin",
+    facturX.includes("<ram:BasisAmount>450.00</ram:BasisAmount>") && !facturX.includes("300.00"),
+    facturX.match(/<ram:BasisAmount>[^<]*/)?.[0] ?? "",
+  );
+  check(
+    "the XML identifies the seller the way a platform requires",
+    facturX.includes("88012345600017") && facturX.includes('schemeID="VA">FR69880123456'),
+  );
+
   const invoicePdf = await pdfText(client, `${BASE}${invoiceHref}/pdf`);
   check("the invoice downloads as a PDF", invoicePdf.ok, invoicePdf.text);
   check(
     "the invoice PDF carries the margin-scheme mention",
     invoicePdf.text.includes("R\u00e9gime particulier \u2013 agences de voyages"),
+  );
+  check(
+    "the invoice PDF carries its structured version inside it",
+    await client.evaluate(async (url) => {
+      const response = await fetch(url, { credentials: "include" });
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let raw = "";
+      for (let index = 0; index < bytes.length; index += 4096) {
+        raw += String.fromCharCode(...bytes.subarray(index, index + 4096));
+      }
+      return raw.includes("/EmbeddedFiles") && raw.includes("VATEX-EU-306");
+    }, `${BASE}${invoiceHref}/pdf`),
   );
   check(
     "the invoice PDF never puts a figure on the VAT",
