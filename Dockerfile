@@ -16,7 +16,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+# Le dépôt n'a pas de `public/` — rien à servir en statique aujourd'hui. On le
+# crée quand même : la copie vers l'image finale reste valable, et un fichier
+# déposé là plus tard suivra sans toucher au Dockerfile.
+RUN mkdir -p public && npm run build
 
 # ---------------------------------------------------------------------------
 
