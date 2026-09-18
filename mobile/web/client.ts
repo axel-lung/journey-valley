@@ -39,15 +39,8 @@ interface Pending {
 const pending = new Map<string, Pending>();
 let counter = 0;
 
-declare global {
-  interface Window {
-    JVNet?: {
-      get(url: string, requestId: string): void;
-      post?(url: string, body: string, token: string, requestId: string): void;
-      getWithToken?(url: string, token: string, requestId: string): void;
-    };
-  }
-}
+// Le contrat du pont Java est déclaré dans `bridge.d.ts` — une seule fois, sinon
+// les deux augmentations de `Window` se contredisent.
 
 function origin(): string {
   // Dans un navigateur de développement, le bundle est servi par le serveur

@@ -12,13 +12,8 @@
  */
 import { getDb, persistNow } from "./store";
 
-declare global {
-  interface Window {
-    JVNet?: { get(url: string, requestId: string): void };
-    JVPrint?: { page(documentName: string): void };
-    __jvNetResolve?: (id: string, ok: boolean, status: number, body: string) => void;
-  }
-}
+// `window.JVNet`, `window.JVPrint` et `window.__jvNetResolve` sont déclarés une
+// seule fois, dans `bridge.d.ts`.
 
 export class NetworkUnavailable extends Error {
   constructor(message = "Service injoignable.") {
