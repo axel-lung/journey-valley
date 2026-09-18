@@ -216,6 +216,8 @@ export interface FileDetail extends FileSummary {
     cost_cents?: number;
     sell_cents?: number;
     zone?: string;
+    /** L'achat dans sa devise d'origine, quand il en a une. */
+    cost_origin?: string;
   }>;
   checklist: Array<{ id: number; label: string; done: boolean }>;
   /**

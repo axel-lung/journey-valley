@@ -736,7 +736,48 @@ try {
   await page.waitForURL(/\/trips\/\d+$/);
   const lisbonUrl = page.url();
 
-  // 11b. Les pièces du dossier : ce que l'agence dépose, et qui a le droit de
+  // 11b. Un achat facturé en devise : le dossier garde ce que le fournisseur a
+  // facturé, et la marge continue de se calculer sur ce qui est sorti du compte.
+  //
+  // Sur le dossier de Lisbonne, et non sur celui d'Oslo, parce qu'Oslo sert de
+  // référence aux vérifications de marge et de TVA : une ligne de plus en
+  // changerait tous les chiffres.
+  await page.evaluate(() => {
+    // Le volet est peut-être resté ouvert : on l'ouvre sans basculer, sinon un
+    // clic de plus le referme.
+    const panel = document.querySelector("details:has(select[name='type'])");
+    if (panel) panel.open = true;
+  });
+  const foreignForm = page.locator('form:has(select[name="type"])');
+  await foreignForm.locator('select[name="type"]').selectOption("activity");
+  await foreignForm.locator('input[name="vendor"]').fill("Bangkok Réceptif");
+  await foreignForm.getByRole("button", { name: /autre devise/ }).click();
+  await foreignForm.locator('input[name="foreign_amount"]').fill("45 000");
+  await foreignForm.locator('select[name="foreign_currency"]').selectOption("THB");
+  await foreignForm.locator('input[name="amount"]').fill("1 170");
+  await foreignForm.locator('input[name="agency_quote"]').fill("1 400");
+  await foreignForm.getByRole("button", { name: "Ajouter au voyage" }).click();
+  await page.waitForSelector("text=Bangkok Réceptif");
+
+  // La ligne de réservation, pas la journée du programme qui la contient : son
+  // bouton de suppression la nomme, c'est l'ancre la plus sûre.
+  const foreignRow = page.locator(
+    'li:has(button[aria-label="Supprimer la réservation Bangkok Réceptif"])',
+  );
+  check(
+    "a purchase keeps the currency the supplier billed in",
+    await foreignRow.getByText(/45\s?000/).first().isVisible(),
+  );
+  check(
+    "the rate is derived from both amounts, not typed",
+    await foreignRow.getByText(/au taux de 0,026/).first().isVisible(),
+  );
+  check(
+    "the margin still counts what actually left the account",
+    await foreignRow.getByText(/1\s?170/).first().isVisible(),
+  );
+
+  // 11c. Les pièces du dossier : ce que l'agence dépose, et qui a le droit de
   // le voir. Une facture fournisseur porte un prix d'achat — elle ne sort pas.
   const documentsForm = page.locator('form:has(input[name="file"])');
   await documentsForm.locator('input[name="file"]').setInputFiles({
@@ -841,6 +882,11 @@ try {
   check(
     "the traveller never sees the agency's own pieces",
     !clientPage.includes("facture-fournisseur"),
+  );
+  check(
+    "the traveller never sees what a supplier billed the agency",
+    !clientPage.includes("THB") && !clientPage.includes("au taux de"),
+    clientPage.match(/.{0,40}(THB|au taux de).{0,40}/)?.[0] ?? "",
   );
 
   // Et pas seulement à l'écran : le fichier lui-même lui est fermé.

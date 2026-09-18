@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getClient } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { getDb, recordActivity } from "@/lib/db";
+import { deriveRate, isPurchaseCurrency } from "@/lib/exchange";
 import { parseAmountToCents } from "@/lib/money";
 import { CHECKLIST_TEMPLATE } from "@/lib/checklist";
 import { canAddCompanion, canCreateTrip } from "@/lib/plans";
@@ -154,6 +155,9 @@ const bookingSchema = z.object({
   amount: z.string().trim().min(1, "Combien avez-vous payé ?"),
   agency_quote: z.string().trim().default(""),
   zone: z.enum(["eu", "non_eu"]).default("eu"),
+  /** Ce que le fournisseur a facturé, quand ce n'est pas dans la devise du dossier. */
+  foreign_currency: z.string().trim().max(3).default(""),
+  foreign_amount: z.string().trim().default(""),
   nights: z.string().optional(),
 });
 
@@ -181,11 +185,31 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
   const nights =
     parsed.data.type === "stay" && parsed.data.nights ? Number(parsed.data.nights) || null : null;
 
+  // L'achat en devise : on garde ce que le fournisseur a facturé, et le taux
+  // se déduit des deux montants. Le conseiller ne saisit jamais de taux — sa
+  // banque lui débite une somme exacte, et c'est elle qui fait la marge.
+  let foreignCurrency = "";
+  let foreignAmount = 0;
+  if (parsed.data.foreign_currency && parsed.data.foreign_amount) {
+    if (!isPurchaseCurrency(parsed.data.foreign_currency)) {
+      return { fieldErrors: { foreign_currency: "Devise inconnue." } };
+    }
+    const typed = parseAmountToCents(parsed.data.foreign_amount);
+    if (typed === null || typed <= 0) {
+      return { fieldErrors: { foreign_amount: "Un montant comme 45000 ou 45 000,50." } };
+    }
+    if (parsed.data.foreign_currency !== trip.currency) {
+      foreignCurrency = parsed.data.foreign_currency;
+      foreignAmount = typed;
+    }
+  }
+
   getDb()
     .prepare(
       `INSERT INTO bookings (trip_id, type, vendor, reference, description, start_at, end_at,
-                             amount_cents, agency_quote_cents, zone, nights, booked_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             amount_cents, agency_quote_cents, zone, nights, booked_by,
+                             foreign_currency, foreign_amount_cents, fx_rate_nanos)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       trip.id,
@@ -200,6 +224,9 @@ export async function addBookingAction(_prev: FormState, formData: FormData): Pr
       parsed.data.zone,
       nights,
       user.id,
+      foreignCurrency,
+      foreignAmount,
+      deriveRate(foreignAmount, amount),
     );
 
   recordActivity({

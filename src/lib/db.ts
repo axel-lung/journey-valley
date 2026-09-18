@@ -341,6 +341,13 @@ export function migrate(db: Database.Database): void {
   addColumn(db, "agencies", "mediator", "TEXT NOT NULL DEFAULT ''");
   addColumn(db, "agencies", "terms", "TEXT NOT NULL DEFAULT ''");
 
+  // L'achat en devise. `amount_cents` garde son sens — ce que l'agence a payé,
+  // dans la devise du dossier — et ces trois colonnes en gardent l'origine :
+  // aucun calcul de marge, de TVA ou de budget n'a à les connaître.
+  addColumn(db, "bookings", "foreign_currency", "TEXT NOT NULL DEFAULT ''");
+  addColumn(db, "bookings", "foreign_amount_cents", "INTEGER NOT NULL DEFAULT 0");
+  addColumn(db, "bookings", "fx_rate_nanos", "INTEGER NOT NULL DEFAULT 0");
+
   // Ce qu'une facture française doit porter, et que la version grand public
   // n'avait jamais eu à demander. Le numéro de TVA devient indispensable avec
   // la facture électronique : sans lui, le XML est rejeté.

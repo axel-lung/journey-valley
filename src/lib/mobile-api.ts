@@ -4,6 +4,7 @@ import { listAttachments } from "./attachments-store";
 import { authenticate } from "./auth";
 import { budgetStatus } from "./budget";
 import { getDb } from "./db";
+import { describePurchase, hasForeign } from "./exchange";
 import { countdown } from "./format";
 import { buildItinerary } from "./itinerary";
 import { dossierMargin } from "./margin";
@@ -235,6 +236,8 @@ export interface MobileFileDetail extends MobileFileSummary {
     cost_cents?: number;
     sell_cents?: number;
     zone?: string;
+    /** « 45 000 THB au taux de 0,026 », quand l'achat vient d'une autre devise. */
+    cost_origin?: string;
   }>;
   checklist: Array<{ id: number; label: string; done: boolean }>;
   /**
@@ -338,6 +341,7 @@ export function file(user: User, tripId: number): MobileFileDetail | null {
       cost_cents: booking.amount_cents,
       sell_cents: booking.agency_quote_cents,
       zone: booking.zone,
+      ...(hasForeign(booking) ? { cost_origin: describePurchase(booking) } : {}),
     })),
     quotes: listQuotes(trip.id).map((quote) => ({
       reference: quote.reference,

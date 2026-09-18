@@ -685,6 +685,9 @@ function Money({ file }: { file: FileDetail }) {
                 <p className="text-xs tabular-nums text-stone-400">
                   achat {formatMoney(booking.cost_cents ?? 0, CURRENCY)}
                 </p>
+                {booking.cost_origin && (
+                  <p className="text-xs text-stone-400">{booking.cost_origin}</p>
+                )}
               </div>
             </li>
           ))}

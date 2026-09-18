@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
 import { isAdvisor } from "@/lib/agency";
 import { listAttachments } from "@/lib/attachments-store";
+import { describePurchase, hasForeign } from "@/lib/exchange";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -97,6 +98,10 @@ export default async function ProgrammePage({ params }: { params: Promise<{ id: 
                   <p className="tabular-nums text-stone-800">
                     {formatMoney(booking.amount_cents, currency)}
                   </p>
+                  {/* L'achat en devise : de quoi retrouver la ligne du relevé. */}
+                  {hasForeign(booking) && (
+                    <p className="text-xs text-stone-500">{describePurchase(booking)}</p>
+                  )}
                   {booking.agency_quote_cents > 0 && (
                     <p className="text-xs text-emerald-700">
                       agence {formatMoney(booking.agency_quote_cents, currency)} · −

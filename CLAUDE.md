@@ -59,7 +59,13 @@ du fichier qu'on modifie.
     égale au **prix total** — jamais la marge — et le motif codé
     (`VATEX-EU-306`, ou `-309` quand tout est exécuté hors de l'Union). Le
     fichier part chez le client : la règle 10 y vaut mot pour mot.
-13. **On ne fait pas croire qu'un message est parti.** Un message est écrit
+13. **Un achat en devise garde son origine, pas un taux saisi.**
+    `amount_cents` reste ce que l'agence a payé dans la devise du dossier — la
+    marge, la TVA et le budget ne connaissent rien d'autre. Le montant du
+    fournisseur et sa devise sont un souvenir, et le taux s'en déduit
+    (`exchange.ts`) : le conseiller ne divise jamais à la main, donc la marge
+    ne s'écarte jamais de ce qui est sorti du compte.
+14. **On ne fait pas croire qu'un message est parti.** Un message est écrit
     dans la file avant d'être envoyé et y reste s'il échoue, avec la réponse du
     serveur telle quelle. Sans serveur configuré, l'écran le dit et le texte se
     copie — personne ne perd un devis parce qu'un réglage manquait.
@@ -70,7 +76,7 @@ du fichier qu'on modifie.
 src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
                   invoices, vat-return, budget, stages, itinerary, format,
                   practical, agency, pdf, documents, facturx, mail,
-                  attachments
+                  attachments, exchange
                   (les modules *-store.ts portent les écritures ; le module pur
                   reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
@@ -95,8 +101,8 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 263 tests unitaires
-npm run build && npm run smoke       # 92 vérifications web bout-en-bout
+npm run typecheck && npm test        # 280 tests unitaires
+npm run build && npm run smoke       # 96 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 21 vérifications sur le bundle Android
 ```
@@ -164,6 +170,9 @@ finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
   première émission réelle.
 - Pas de raccordement à une PDP : le fichier est produit, son dépôt reste à
   brancher.
+- Un achat garde sa devise d'origine, mais le **prix de vente** reste un
+  forfait global : pas de prix par personne, pas de remise ni de frais de
+  dossier comme lignes de premier rang.
 - Une seule agence par conseiller, pas de collègue à inviter.
 - L'offre agence existe dans `plans.ts`, mais rien ne facture l'abonnement.
 - Le téléphone lit, il n'écrit pas.

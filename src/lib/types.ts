@@ -150,6 +150,15 @@ export interface Booking {
   agency_quote_cents: number;
   /** Where the service is performed — the key to the VAT-on-margin split. */
   zone: VatZone;
+  /**
+   * Ce que l'achat a coûté dans sa devise d'origine, quand ce n'est pas celle
+   * du dossier. Purement mémoriel : `amount_cents` reste la vérité, et c'est
+   * lui que lisent la marge, la TVA et le budget. Voir `exchange.ts`.
+   */
+  foreign_currency: string;
+  foreign_amount_cents: number;
+  /** Le taux qui relie les deux montants, en milliardièmes. */
+  fx_rate_nanos: number;
   nights: number | null;
   booked_by: number | null;
   created_at: string;
