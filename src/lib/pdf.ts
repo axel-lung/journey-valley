@@ -68,6 +68,24 @@ export function encodeWinAnsi(text: string): number[] {
   return bytes;
 }
 
+/** The reverse of `encodeWinAnsi`, for reading text back out of a PDF. */
+const TO_UNICODE: Record<number, string> = Object.fromEntries(
+  Object.entries(CP1252_EXTRAS).map(([char, code]) => [code, char]),
+);
+
+/**
+ * Turns WinAnsi bytes back into a string.
+ *
+ * Needed to read a programme out of a PDF an agency sends us — see
+ * `import/text.ts`. Bytes below 256 that CP1252 did not move are Latin-1, so
+ * they map to themselves.
+ */
+export function decodeWinAnsi(bytes: Iterable<number>): string {
+  let out = "";
+  for (const byte of bytes) out += TO_UNICODE[byte] ?? String.fromCharCode(byte);
+  return out;
+}
+
 /* -------------------------------------------------------------- metrics */
 
 /**

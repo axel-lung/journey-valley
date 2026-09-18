@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { TripCard } from "@/components/trip-card";
-import { Card, EmptyState, buttonClass, inputClass } from "@/components/ui";
+import { Card, EmptyState, buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 import { isAdvisor } from "@/lib/agency";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -37,9 +37,16 @@ export default async function TripsPage({
             Ceux que vous préparez, ceux que vous avez faits, et ceux où l'on vous a invité.
           </p>
         </div>
-        <Link href="/trips/new" className={buttonClass}>
-          Nouveau voyage
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {/* L'import passe devant : un conseiller a presque toujours déjà
+              écrit son programme quelque part. */}
+          <Link href="/trips/importer" className={buttonClass}>
+            Importer un programme
+          </Link>
+          <Link href="/trips/new" className={secondaryButtonClass}>
+            Nouveau dossier
+          </Link>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

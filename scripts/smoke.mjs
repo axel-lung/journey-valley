@@ -206,6 +206,106 @@ try {
   await page.waitForURL(/\/clients\/\d+$/);
   check("a client can be filed", await page.getByText("Sam Ortega").first().isVisible());
 
+  // 1c. L'import d'un programme déjà écrit : la porte d'entrée du produit.
+  // On colle le texte, on lit ce qui a été compris, on décoche le bruit, et le
+  // dossier naît de ce qui a été validé.
+  await page.goto(`${BASE}/trips/importer`);
+  await page.fill(
+    'textarea[name="pasted"]',
+    [
+      "Marrakech et le désert d'Agafay",
+      "Base 2 participants",
+      "",
+      "Jour 1 – 12/10/2026 : Paris → Marrakech",
+      "• Vol AF 1796 Paris CDG → Marrakech RAK",
+      "• Transfert privé de l'aéroport au riad",
+      "• Nuit au Riad Kniza",
+      "",
+      "Jour 2 – 13/10/2026 : Médina",
+      "• Visite guidée de la médina",
+      "",
+      "Prix par personne : 1 890 €",
+      "Ce prix ne comprend pas les boissons.",
+    ].join("\n"),
+  );
+  await page.getByRole("button", { name: "Lire le programme" }).click();
+  await page.waitForSelector("text=Ce que nous avons lu");
+
+  check(
+    "an existing programme is read into days",
+    await page.getByText(/Jour 1 — Paris/).first().isVisible(),
+  );
+  check(
+    "the reader classifies a transfer as transport, not as a flight",
+    await page
+      .locator("li", { hasText: "Transfert privé de l'aéroport au riad" })
+      .getByText("Transport")
+      .first()
+      .isVisible(),
+  );
+  check(
+    "a flight keeps its number",
+    await page.getByText("AF 1796").first().isVisible(),
+  );
+  check(
+    "dates read from the programme prefill the dossier",
+    (await page.locator('input[name="start_date"]').inputValue()) === "2026-10-12",
+    await page.locator('input[name="start_date"]').inputValue(),
+  );
+  check(
+    "travellers are read from « base 2 participants »",
+    (await page.locator('input[name="travellers"]').inputValue()) === "2",
+  );
+  check(
+    "what was guessed says so",
+    await page.getByText("supposé").first().isVisible(),
+  );
+  check(
+    "the price footer is kept aside, not attached to the last day",
+    // Le texte collé est encore dans la zone de saisie : on interroge la
+    // ligne de la carte « Non rattaché », pas la page.
+    (await page.getByText(/Non rattaché/).isVisible()) &&
+      (await page.locator("li", { hasText: "Ce prix ne comprend pas" }).first().isVisible()),
+  );
+
+  // Décocher une ligne suffit à l'écarter du dossier.
+  // La puce a été retirée à la lecture : l'étiquette ne la porte plus.
+  await page.getByRole("checkbox", { name: "Retenir Visite guidée de la médina" }).uncheck();
+  await page.getByRole("button", { name: /^Créer le dossier avec 3 prestations$/ }).click();
+  await page.waitForURL(/\/trips\/\d+$/);
+  const importedUrl = page.url();
+  check("the import creates a dossier", importedUrl.includes("/trips/"));
+  check(
+    "only the retained services land on the dossier",
+    (await page.getByText("Vol AF 1796 Paris CDG → Marrakech RAK").first().isVisible()) &&
+      (await page.getByText("Visite guidée de la médina").count()) === 0,
+  );
+  // Un programme décrit le voyage, pas ce qu'il a coûté : les lignes arrivent
+  // sans montant, et l'écran doit dire que la marge n'est donc pas ferme —
+  // c'est la règle 5 appliquée à un dossier importé.
+  // Un programme décrit le voyage, pas ce qu'il a coûté : les lignes arrivent
+  // sans montant, et l'écran doit dire que la marge n'est donc pas ferme —
+  // c'est la règle 5 appliquée à un dossier importé.
+  await page.goto(`${importedUrl}/prix`);
+  const priced = await page.locator("main").innerText();
+  check(
+    "an imported dossier carries its services and no money it never had",
+    // L'espace avant le symbole est une insécable fine, d'où `\s`.
+    priced.includes("3 lignes") && /ACHATS\s*0\s*€/.test(priced),
+    priced.match(/ACHATS[\s\S]{0,20}/)?.[0] ?? "",
+  );
+  check(
+    "and it asks for a sell price rather than inventing a margin",
+    await page.getByText("Posez un prix de vente").first().isVisible(),
+  );
+
+  // On annule le dossier importé : sans cela il consommerait un des deux
+  // dossiers de l'essai, et les vérifications de forfait plus bas ne
+  // testeraient plus ce qu'elles croient tester.
+  await page.goto(importedUrl);
+  await page.getByRole("button", { name: "Annuler le voyage" }).click();
+  await page.waitForSelector("text=Annulé");
+
   // 2. Plan a trip with a budget and an agency quote.
   await createTrip(page, {
     title: "Smoke test — Oslo",

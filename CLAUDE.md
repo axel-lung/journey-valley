@@ -65,7 +65,12 @@ du fichier qu'on modifie.
     fournisseur et sa devise sont un souvenir, et le taux s'en déduit
     (`exchange.ts`) : le conseiller ne divise jamais à la main, donc la marge
     ne s'écarte jamais de ce qui est sorti du compte.
-14. **On ne fait pas croire qu'un message est parti.** Un message est écrit
+14. **Une lecture de programme n'invente rien et ne jette rien.** `import/`
+    rend ce qu'il a compris, marque ce qu'il a supposé (`confidence`), et met
+    dans `unmatched` toute ligne qu'aucune journée n'a réclamée — le bloc
+    « ce prix ne comprend pas » se lit, il ne se perd pas. Un fichier illisible
+    rend un programme vide, jamais du bruit.
+15. **On ne fait pas croire qu'un message est parti.** Un message est écrit
     dans la file avant d'être envoyé et y reste s'il échoue, avec la réponse du
     serveur telle quelle. Sans serveur configuré, l'écran le dit et le texte se
     copie — personne ne perd un devis parce qu'un réglage manquait.
@@ -77,6 +82,9 @@ src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
                   invoices, vat-return, budget, stages, itinerary, format,
                   practical, agency, pdf, documents, facturx, mail,
                   attachments, exchange
+src/lib/import/   lire un programme déjà écrit : text.ts sort le texte d'un PDF
+                  ou d'un .docx (zlib et zip, sans dépendance), parse.ts en
+                  tire des journées et des prestations. Purs tous les deux.
                   (les modules *-store.ts portent les écritures ; le module pur
                   reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
@@ -101,8 +109,8 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 280 tests unitaires
-npm run build && npm run smoke       # 96 vérifications web bout-en-bout
+npm run typecheck && npm test        # 332 tests unitaires
+npm run build && npm run smoke       # 107 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
                                      # 21 vérifications sur le bundle Android
 ```
@@ -170,6 +178,15 @@ finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
   première émission réelle.
 - Pas de raccordement à une PDP : le fichier est produit, son dépôt reste à
   brancher.
+- L'import lit un PDF dont le texte est extractible, pas un scan (il faudrait
+  de la reconnaissance de caractères) ni un PDF aux polices en Identity-H.
+  L'écran propose alors le collage manuel, qui marche toujours.
+- L'extraction est **heuristique, sans modèle de langue** : pas de réseau
+  sortant ici, et un fournisseur assisté reste à brancher à côté du parseur —
+  il devra faire mieux que lui pour valoir son coût et sa sortie de données.
+- La proposition interactive n'existe pas encore : ni commentaires par étape,
+  ni médias, ni variantes, ni « demander un ajustement ». Voir
+  `docs/recadrage-proposition.md`.
 - Un achat garde sa devise d'origine, mais le **prix de vente** reste un
   forfait global : pas de prix par personne, pas de remise ni de frais de
   dossier comme lignes de premier rang.

@@ -117,7 +117,8 @@ export function Field({
   children,
   className = "",
 }: {
-  label: string;
+  /** Du texte le plus souvent, mais un libellé peut porter une annotation. */
+  label: ReactNode;
   hint?: string;
   children: ReactNode;
   className?: string;
