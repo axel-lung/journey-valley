@@ -61,6 +61,8 @@ export interface Invoice {
   total_cents: number;
   due_date: string | null;
   issued_at: string | null;
+  /** Quand le client a ouvert la facture ; null tant qu'il ne l'a pas vue. */
+  opened_at: string | null;
   paid_at: string | null;
   payment_note: string;
   created_at: string;

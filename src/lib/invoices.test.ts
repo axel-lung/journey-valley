@@ -15,6 +15,7 @@ function invoice(overrides: Partial<Invoice>): Invoice {
     total_cents: 100_000,
     due_date: null,
     issued_at: "2026-01-01",
+    opened_at: null,
     paid_at: null,
     payment_note: "",
     created_at: "2026-01-01",

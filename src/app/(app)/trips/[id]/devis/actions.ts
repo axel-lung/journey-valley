@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { assertAdvisor, getAgency } from "@/lib/agency";
+import { assertAdvisor, getAgency, getClient } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { recordActivity } from "@/lib/db";
-import { billingFor, suggestedAmount } from "@/lib/invoices";
+import { formatDate } from "@/lib/format";
+import { billingFor, INVOICE_KIND_LABEL, suggestedAmount } from "@/lib/invoices";
 import {
   cancel,
   createInvoice,
@@ -17,8 +18,29 @@ import {
 } from "@/lib/invoices-store";
 import { dossierMargin } from "@/lib/margin";
 import { formatMoney, parseAmountToCents } from "@/lib/money";
+import { composeInvoice, composeQuote } from "@/lib/mail";
+import { publicUrl, queueAndDeliver } from "@/lib/mail-store";
 import { createQuote, deleteQuote, getQuote, listQuotes, markSent } from "@/lib/quotes";
 import { getTrip, listBookings, membershipRole } from "@/lib/trips";
+import type { Trip, User } from "@/lib/types";
+
+/**
+ * À qui le message part.
+ *
+ * Le client du dossier, s'il a une adresse. Sans adresse, rien n'est mis en
+ * file : un message sans destinataire n'attend pas, il n'existe pas — et
+ * l'écran le dit plutôt que de laisser croire à un envoi.
+ */
+function recipientFor(agencyId: number, trip: Trip): { name: string; email: string } | null {
+  if (!trip.client_id) return null;
+  const client = getClient(agencyId, trip.client_id);
+  if (!client?.email) return null;
+  return { name: client.name, email: client.email };
+}
+
+function senderFor(user: User): { name: string; email: string } {
+  return { name: user.name, email: user.email };
+}
 
 /**
  * Les devis, côté conseiller.
@@ -105,7 +127,39 @@ export async function sendQuoteAction(formData: FormData): Promise<void> {
     detail: quote.reference,
   });
 
+  // Le message part avec le lien public : c'est lui qui porte le devis, le PDF
+  // et la réponse du client. Le devis reste envoyé même si le courrier échoue —
+  // l'échec se range dans la file, où il se voit et se rattrape.
+  const trip = getTrip(quote.trip_id);
+  const agency = getAgency(quote.agency_id);
+  const to = trip && quote.agency_id ? recipientFor(quote.agency_id, trip) : null;
+
+  if (trip && to) {
+    const composed = composeQuote({
+      client: to,
+      agencyName: agency?.name ?? "votre agence",
+      advisor: senderFor(user),
+      reference: quote.reference,
+      title: quote.title,
+      url: publicUrl(`/devis/${quote.token}`),
+      validUntil: quote.valid_until ? formatDate(quote.valid_until) : null,
+      intro: quote.intro,
+    });
+
+    await queueAndDeliver({
+      agencyId: quote.agency_id,
+      tripId: quote.trip_id,
+      kind: "quote",
+      to,
+      subject: composed.subject,
+      body: composed.body,
+      link: publicUrl(`/devis/${quote.token}`),
+      fromEmail: user.email,
+    });
+  }
+
   revalidatePath(`/trips/${quote.trip_id}/devis`);
+  revalidatePath("/messages");
 }
 
 export async function deleteQuoteAction(formData: FormData): Promise<void> {
@@ -214,7 +268,37 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     action: "invoice.issued",
     detail: invoice.reference,
   });
+
+  const trip = getTrip(invoice.trip_id);
+  const agency = getAgency(invoice.agency_id);
+  const to = trip ? recipientFor(invoice.agency_id, trip) : null;
+
+  if (trip && to) {
+    const composed = composeInvoice({
+      client: to,
+      agencyName: agency?.name ?? "votre agence",
+      advisor: senderFor(user),
+      reference: invoice.reference,
+      kindLabel: INVOICE_KIND_LABEL[invoice.kind],
+      amount: formatMoney(invoice.total_cents, trip.currency),
+      dueDate: invoice.due_date ? formatDate(invoice.due_date) : null,
+      url: publicUrl(`/facture/${invoice.token}`),
+    });
+
+    await queueAndDeliver({
+      agencyId: invoice.agency_id,
+      tripId: invoice.trip_id,
+      kind: "invoice",
+      to,
+      subject: composed.subject,
+      body: composed.body,
+      link: publicUrl(`/facture/${invoice.token}`),
+      fromEmail: user.email,
+    });
+  }
+
   revalidatePath(`/trips/${invoice.trip_id}/devis`);
+  revalidatePath("/messages");
 }
 
 export async function markInvoicePaidAction(formData: FormData): Promise<void> {

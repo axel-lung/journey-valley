@@ -86,7 +86,9 @@ export default async function AccountPage() {
                       className={plan.id === "plus" ? buttonClass : secondaryButtonClass}
                       pendingLabel="Changement…"
                     >
-                      {plan.id === "plus" ? "Passer à Plus" : "Revenir à Découverte"}
+                      {plan.id === "plus"
+                        ? `Passer au forfait ${PLANS.plus.name}`
+                        : `Revenir à l'${PLANS.free.name.toLowerCase()}`}
                     </SubmitButton>
                   </form>
                 )}

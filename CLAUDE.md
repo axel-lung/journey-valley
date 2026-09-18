@@ -6,9 +6,11 @@ marge, le voyageur voit son voyage et son prix.
 
 Interface en français. Code, commentaires et tests en anglais — sauf les
 modules écrits après le pivot B2B (`margin.ts`, `vat.ts`, `legal.ts`,
-`quotes.ts`, `agency.ts`, `mobile-api.ts`, `mobile/web/*`), commentés en
-français comme le métier qu'ils décrivent. Suivre la langue du fichier qu'on
-modifie.
+`quotes.ts`, `agency.ts`, `mobile-api.ts`, `documents.ts`, `mail.ts`,
+`mail-store.ts`, `smtp.ts`, `plans.ts`, `mobile/web/*`), commentés en français
+comme le métier qu'ils décrivent. `pdf.ts` décrit un format de fichier, pas le
+métier : il reste en anglais, comme `money.ts` ou `format.ts`. Suivre la langue
+du fichier qu'on modifie.
 
 ## Les règles qui ne se négocient pas
 
@@ -43,13 +45,21 @@ modifie.
 9. **Les estimations ne sont pas des offres.** Le fournisseur hors ligne produit
    des ordres de grandeur ; chaque écran qui les montre le dit, et elles
    n'entrent jamais dans un prix de vente ni dans une alerte.
+10. **Un document PDF ne reçoit jamais un coût ni une marge.** `documents.ts`
+    ne lit que ce qui est déjà public — les lignes figées du devis, le montant
+    de la facture, le programme. La règle tient à la signature des fonctions,
+    pas à un `if`, et les tests relisent le texte du PDF pour s'en assurer.
+11. **On ne fait pas croire qu'un message est parti.** Un message est écrit
+    dans la file avant d'être envoyé et y reste s'il échoue, avec la réponse du
+    serveur telle quelle. Sans serveur configuré, l'écran le dit et le texte se
+    copie — personne ne perd un devis parce qu'un réglage manquait.
 
 ## Où vivent les choses
 
 ```
 src/lib/          domaine pur et testé : money, margin, vat, legal, quotes,
                   invoices, vat-return, budget, stages, itinerary, format,
-                  practical, agency
+                  practical, agency, pdf, documents, mail
                   (les modules *-store.ts portent les écritures ; le module pur
                   reste importable par un composant client)
 src/lib/api/      services libres : URLs + parseurs (purs, partagés avec le
@@ -58,6 +68,9 @@ src/lib/db.ts     schéma, migrations additives via addColumn(), seed au premier
                   démarrage
 src/app/(app)/    tout ce qui est derrière une session
 src/app/devis/    le devis public : pas de compte, le jeton autorise
+                  (`/pdf` sur la même route rend le document)
+src/app/mot-de-passe/  mot de passe oublié : demande, puis lien à usage unique
+src/app/invitation/    le client ouvre son accès depuis le lien du conseiller
 src/app/api/mobile/  ce que lit l'application Android, rôle par rôle
 mobile/web/       l'app : client.ts (API + cache), net.ts (pont), api.ts
                   (services libres), store.ts (session), app.tsx (écrans)
@@ -71,10 +84,10 @@ version grand public, sens inversé par le pivot, documenté dans `types.ts`.
 ## Vérifier
 
 ```bash
-npm run typecheck && npm test        # 162 tests unitaires
-npm run build && npm run smoke       # 57 vérifications web bout-en-bout
+npm run typecheck && npm test        # 220 tests unitaires
+npm run build && npm run smoke       # 80 vérifications web bout-en-bout
 JV_SERVER_URL=http://127.0.0.1:3114 npm run apk:web && npm run apk:test
-                                     # 19 vérifications sur le bundle Android
+                                     # 21 vérifications sur le bundle Android
 ```
 
 `npm run smoke` et `npm run apk:test` démarrent un vrai serveur sur une base
@@ -96,6 +109,9 @@ Mot de passe commun : `journey2026`.
 - **Pas de réseau sortant** vers les services tiers (Nominatim, Open-Meteo,
   Amadeus, Légifrance…). Les parseurs sont testés sur des réponses enregistrées.
   Ne jamais écrire un test qui suppose un appel réel.
+- **Le dialogue SMTP n'est pas couvert par les tests** et ne peut pas l'être
+  ici : ce qui est pur (composition du message, lecture de `JV_SMTP_URL`) l'est,
+  la socket se vérifie contre un vrai serveur à la première configuration.
 - **Pas de SDK Android Google.** L'APK se construit avec `aapt`,
   `dalvik-exchange`, `zipalign`, `apksigner` et `android-sdk-platform-23`.
 - `JV_SERVER_URL` fixe l'adresse du serveur dans l'APK, côté bundle *et* côté
@@ -104,7 +120,11 @@ Mot de passe commun : `journey2026`.
 
 Déploiement : `docker-compose.yml` derrière un Traefik existant (réseau externe
 `traefik`, resolver `myresolver`, rien de publié sur l'hôte), détaillé dans
-`DEPLOY.md`. Le `Dockerfile` recompile better-sqlite3 dans la base de l'image
+`DEPLOY.md`. Deux variables décident de l'envoi des messages :
+`JV_PUBLIC_URL` (l'adresse publique, pour que les liens soient cliquables
+depuis une boîte mail) et `JV_SMTP_URL` (`smtps://user:pass@serveur:465`),
+avec `JV_MAIL_FROM` en option. Sans elles, les messages restent dans la file et
+l'écran le dit. Le `Dockerfile` recompile better-sqlite3 dans la base de l'image
 finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
 
 ## Ce qui reste ouvert
@@ -115,7 +135,10 @@ finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
   vente réelle.
 - Pas d'encaissement : la facture suit l'acompte et le solde, l'agence encaisse
   par ses propres moyens.
-- Pas d'invitation client en un clic : il s'inscrit, le conseiller l'ajoute.
+- Pas de téléversement de documents : ni voucher fournisseur, ni passeport, ni
+  justificatif de dépense (`expenses.receipt_name` garde un nom sans fichier).
+- Pas de Factur-X ni de raccordement à une PDP, alors que la réception devient
+  obligatoire en septembre 2026 et l'émission pour les PME en septembre 2027.
 - Une seule agence par conseiller, pas de collègue à inviter.
-- Rien ne facture l'abonnement de l'agence.
+- L'offre agence existe dans `plans.ts`, mais rien ne facture l'abonnement.
 - Le téléphone lit, il n'écrit pas.

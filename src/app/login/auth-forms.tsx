@@ -46,35 +46,43 @@ function SignInForm({ demoEmail }: { demoEmail: string }) {
   const [state, action] = useActionState<AuthState, FormData>(loginAction, {});
 
   return (
-    <form action={action} className="space-y-4">
-      <ErrorNotice message={state.error} />
+    <>
+      <form action={action} className="space-y-4">
+        <ErrorNotice message={state.error} />
 
-      <Field label="E-mail">
-        <input
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          defaultValue={demoEmail}
-          className={inputClass}
-        />
-      </Field>
+        <Field label="E-mail">
+          <input
+            name="email"
+            type="email"
+            autoComplete="username"
+            required
+            defaultValue={demoEmail}
+            className={inputClass}
+          />
+        </Field>
 
-      <Field label="Mot de passe">
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          placeholder="••••••••"
-          className={inputClass}
-        />
-      </Field>
+        <Field label="Mot de passe">
+          <input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="••••••••"
+            className={inputClass}
+          />
+        </Field>
 
-      <SubmitButton className={fullWidthButton} pendingLabel="Connexion…">
-        Se connecter
-      </SubmitButton>
-    </form>
+        <SubmitButton className={fullWidthButton} pendingLabel="Connexion…">
+          Se connecter
+        </SubmitButton>
+      </form>
+
+      <p className="mt-4 text-center text-sm">
+        <a href="/mot-de-passe" className="text-stone-500 hover:text-stone-900">
+          Mot de passe oublié ?
+        </a>
+      </p>
+    </>
   );
 }
 

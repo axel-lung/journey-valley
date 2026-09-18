@@ -123,6 +123,20 @@ function check(name, condition, detail = "") {
   console.log(`${condition ? "✓" : "✗"} ${name}${condition || !detail ? "" : ` — ${detail}`}`);
 }
 
+/**
+ * Lit le lien d'un message en attente dans la file d'envoi.
+ *
+ * Sans serveur d'envoi configuré — le cas ici, et le cas d'une agence qui
+ * débute — c'est la seule façon d'obtenir le lien. C'est aussi ce que fait un
+ * conseiller : il ouvre le texte du message et le copie.
+ */
+async function readQueuedLink(page, subject, prefix) {
+  const row = page.locator("li", { hasText: subject }).first();
+  await row.getByRole("button", { name: "Voir le texte" }).click();
+  const body = await row.locator("textarea[data-message-body]").inputValue();
+  return new RegExp(`${prefix.replace("/", "\\/")}[A-Za-z0-9_-]+`).exec(body)?.[0] ?? null;
+}
+
 async function waitForServer() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
@@ -149,8 +163,11 @@ async function signOut(page) {
   await page.waitForURL("**/login");
 }
 
-async function createTrip(page, { title, city, country, budget, quote }) {
+async function createTrip(page, { title, city, country, budget, quote, client }) {
   await page.goto(`${BASE}/trips/new`);
+  // Rattacher le dossier à un client n'est pas cosmétique : c'est ce qui donne
+  // un destinataire au devis et à la facture.
+  if (client) await page.selectOption('select[name="client_id"]', { label: client });
   await page.fill('input[name="title"]', title);
   await page.fill('input[name="destination_city"]', city);
   await page.fill('input[name="destination_country"]', country);
@@ -195,6 +212,7 @@ try {
     city: "Oslo",
     country: "Norway",
     budget: "1 500",
+    client: "Sam Ortega",
   });
   await page.waitForURL(/\/trips\/\d+$/);
   const tripUrl = page.url();
@@ -461,6 +479,26 @@ try {
     "the acceptance is recorded against the quote, with a name",
     await page.getByText(/Accepté par Sam Ortega/).isVisible(),
   );
+  check(
+    "the advisor sees that the client opened the quote",
+    await page.getByText(/Ouvert par le client/).first().isVisible(),
+  );
+
+  // 6b bis. La file d'envoi : le message existe, et l'écran dit franchement
+  // qu'il n'est pas parti faute de serveur configuré.
+  await page.goto(`${BASE}/messages`);
+  check(
+    "sending a quote queues a message to the client",
+    await page.getByText(/Votre devis DEV-\d{4}-0001/).first().isVisible(),
+  );
+  check(
+    "the outbox says plainly that nothing leaves without a mail server",
+    await page.getByText("Rien ne part automatiquement").isVisible(),
+  );
+  check(
+    "a queued message is marked as such, not as sent",
+    await page.getByText("À envoyer").first().isVisible(),
+  );
 
   // 6c. La facture : acompte, émission, règlement — et pas de TVA dessus.
   await page.goto(`${tripUrl}/devis`);
@@ -547,24 +585,97 @@ try {
   await page.waitForURL("**/marges");
   check("the old savings page now points at the margins", page.url().endsWith("/marges"));
 
-  // 7. The free plan stops at two active trips.
+  // 7. L'essai s'arrête à deux dossiers en cours.
   await createTrip(page, { title: "Smoke test — Porto", city: "Porto", country: "Portugal" });
   await page.waitForURL(/\/trips\/\d+$/);
   await page.goto(`${BASE}/trips/new`);
   check(
-    "the free plan blocks a third active trip",
+    "the trial plan blocks a third active dossier",
     await page.getByText("limite de votre forfait").first().isVisible(),
   );
 
-  // 8. Upgrading lifts the limit.
+  // 8. Le forfait agence lève la limite.
   await page.goto(`${BASE}/account`);
-  await page.getByRole("button", { name: "Passer à Plus" }).last().click();
-  await page.waitForSelector("text=Revenir à Découverte");
+  await page.getByRole("button", { name: "Passer au forfait Agence" }).last().click();
+  await page.waitForSelector("text=Revenir à l'essai");
   await page.goto(`${BASE}/trips/new`);
   check(
-    "Plus removes the limit",
+    "the agency plan removes the limit",
     await page.getByRole("button", { name: "Créer le voyage" }).isVisible(),
   );
+
+  // 8b. L'invitation d'un client : un lien, un mot de passe, et il arrive sur
+  // ses dossiers. C'est le parcours qui manquait — le voyageur devait
+  // s'inscrire seul, puis être rattaché à la main.
+  const guestEmail = `invite-${Date.now()}@example.com`;
+  await page.goto(`${BASE}/clients`);
+  await page.fill('input[name="name"]', "Lou Bertin");
+  await page.fill('input[name="email"]', guestEmail);
+  await page.getByRole("button", { name: "Créer le client" }).click();
+  await page.waitForURL(/\/clients\/\d+$/);
+  await page.getByRole("button", { name: /^Inviter Lou Bertin$/ }).click();
+  await page.waitForSelector("text=Ce client a un accès", { timeout: 5000 }).catch(() => {});
+
+  await page.goto(`${BASE}/messages`);
+  check(
+    "inviting a client queues an invitation",
+    await page.getByText("Votre espace voyageur chez").first().isVisible(),
+  );
+
+  const invitePath = await readQueuedLink(page, "Votre espace voyageur chez", "/invitation/");
+  check("the invitation carries a link", Boolean(invitePath), invitePath ?? "none");
+
+  const invited = await browser.newPage();
+  await invited.goto(`${BASE}${invitePath}`);
+  check(
+    "the invitation names the address the client will sign in with",
+    await invited.getByText(guestEmail).isVisible(),
+  );
+  await invited.fill('input[name="password"]', "lou-motdepasse");
+  await invited.getByRole("button", { name: "Ouvrir mon accès" }).click();
+  await invited.waitForURL("**/mon-voyage");
+  check("accepting the invitation opens a traveller account", invited.url().endsWith("/mon-voyage"));
+  await invited.close();
+
+  // 8c. Mot de passe oublié : demande, lien, nouveau mot de passe, connexion.
+  const forgot = await browser.newPage();
+  await forgot.goto(`${BASE}/mot-de-passe`);
+  await forgot.fill('input[name="email"]', NEW_EMAIL);
+  await forgot.getByRole("button", { name: "Envoyer le lien" }).click();
+  await forgot.waitForSelector("text=Si un compte existe");
+  check(
+    "asking for a reset never says whether the address has an account",
+    await forgot.getByText("Si un compte existe avec cette adresse").isVisible(),
+  );
+
+  await page.goto(`${BASE}/messages`);
+  const resetPath = await readQueuedLink(page, "Choisir un nouveau mot de passe", "/mot-de-passe/");
+  check("the reset link is prepared", Boolean(resetPath), resetPath ?? "none");
+
+  await forgot.goto(`${BASE}${resetPath}`);
+  await forgot.fill('input[name="password"]', "nouveau-mot-de-passe");
+  await forgot.getByRole("button", { name: "Choisir ce mot de passe" }).click();
+  await forgot.waitForURL("**/dashboard");
+  check("the reset link signs you straight back in", forgot.url().endsWith("/dashboard"));
+
+  // Changer de mot de passe coupe les autres sessions : celle de `page` est
+  // morte, ce qui est exactement l'intérêt du geste.
+  const staleSession = await page.goto(`${BASE}/dashboard`);
+  check(
+    "changing the password cuts the other sessions",
+    page.url().includes("/login"),
+    `${page.url()} (${staleSession?.status()})`,
+  );
+  check(
+    "a used reset link cannot serve twice",
+    await (async () => {
+      await forgot.goto(`${BASE}${resetPath}`);
+      return forgot.getByText("Ce lien a expiré ou a déjà servi").isVisible();
+    })(),
+  );
+  await forgot.close();
+
+  await signIn(page, NEW_EMAIL, "nouveau-mot-de-passe");
 
   // 9. A trip you are not on is not reachable.
   await signOut(page);

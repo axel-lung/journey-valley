@@ -92,6 +92,7 @@ describe("isExpired / isDecidable", () => {
       total_cents: 1,
       deposit_percent: 30,
       sent_at: null,
+      opened_at: null,
       decided_at: null,
       decided_by_name: null,
       decided_ip: null,

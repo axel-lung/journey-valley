@@ -5,6 +5,7 @@ import { tripNights } from "@/lib/budget";
 import { legalMentions, STANDARD_FORM_SOURCE, TRAVELLER_RIGHTS } from "@/lib/legal";
 import { formatMoney } from "@/lib/money";
 import { buildItinerary } from "@/lib/itinerary";
+import { markOpened } from "@/lib/mail-store";
 import { depositCents, getQuoteByToken, isDecidable, isExpired } from "@/lib/quotes";
 import { getTrip, listBookings } from "@/lib/trips";
 import { DecideForm } from "./decide-form";
@@ -34,6 +35,10 @@ export default async function PublicQuotePage({
   const { quote, lines } = found;
   const trip = getTrip(quote.trip_id);
   if (!trip) notFound();
+
+  // Le conseiller veut savoir si le client a vu le devis : c'est ce qui décide
+  // d'une relance. Seule la première ouverture est notée.
+  if (quote.status !== "draft") markOpened("quotes", quote.id);
 
   const agency = getAgency(quote.agency_id);
   const currency = trip.currency;

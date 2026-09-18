@@ -3,6 +3,7 @@ import { getAgency } from "@/lib/agency";
 import { formatDate, formatDateRange } from "@/lib/format";
 import { INVOICE_KIND_LABEL, MARGIN_SCHEME_MENTION } from "@/lib/invoices";
 import { getInvoiceByToken } from "@/lib/invoices-store";
+import { markOpened } from "@/lib/mail-store";
 import { legalMentions } from "@/lib/legal";
 import { formatMoney } from "@/lib/money";
 import { getTrip } from "@/lib/trips";
@@ -33,6 +34,8 @@ export default async function PublicInvoicePage({
 
   const trip = getTrip(invoice.trip_id);
   if (!trip) notFound();
+
+  if (invoice.status !== "draft") markOpened("invoices", invoice.id);
 
   const agency = getAgency(invoice.agency_id);
   const currency = trip.currency;

@@ -89,6 +89,22 @@ export function registerUser(input: {
     .get(Number(result.lastInsertRowid))!;
 }
 
+/**
+ * Remplace le mot de passe d'un compte, et coupe toutes ses sessions.
+ *
+ * Couper les sessions est le point important : on change son mot de passe
+ * parce qu'on soupçonne quelqu'un d'autre de le connaître, et le laisser
+ * connecté viderait le geste de son sens.
+ */
+export function setPassword(userId: number, password: string): void {
+  const db = getDb();
+  db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(
+    hashPassword(password),
+    userId,
+  );
+  db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(userId);
+}
+
 export async function createSession(userId: number): Promise<void> {
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000);

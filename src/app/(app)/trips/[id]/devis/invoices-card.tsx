@@ -90,6 +90,17 @@ export function InvoicesCard({
                   {formatMoney(invoice.total_cents, currency)}
                   {invoice.due_date ? ` · échéance ${formatDate(invoice.due_date)}` : ""}
                 </p>
+                {invoice.status !== "draft" && !invoice.paid_at && (
+                  <p className="text-xs">
+                    {invoice.opened_at ? (
+                      <span className="text-emerald-700">
+                        Ouverte par le client le {formatDate(invoice.opened_at.slice(0, 10))}
+                      </span>
+                    ) : (
+                      <span className="text-stone-500">Pas encore ouverte par le client</span>
+                    )}
+                  </p>
+                )}
                 {invoice.paid_at && (
                   <p className="text-xs text-emerald-700">
                     Réglée le {formatDate(invoice.paid_at.slice(0, 10))}

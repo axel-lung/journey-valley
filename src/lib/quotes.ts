@@ -47,6 +47,8 @@ export interface Quote {
   deposit_percent: number;
   valid_until: string | null;
   sent_at: string | null;
+  /** Quand le client a ouvert le devis pour la première fois ; null tant qu'il ne l'a pas vu. */
+  opened_at: string | null;
   decided_at: string | null;
   decided_by_name: string | null;
   decided_ip: string | null;

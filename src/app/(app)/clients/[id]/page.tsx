@@ -7,6 +7,8 @@ import { formatDate, formatDateRange } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { totalMargin } from "@/lib/margin";
 import { STAGE_LABEL, STAGE_TONE } from "@/lib/stages";
+import { SubmitButton } from "@/components/submit-button";
+import { inviteClientAction } from "../actions";
 import { ClientNotesForm } from "./notes-form";
 
 export const dynamic = "force-dynamic";
@@ -123,12 +125,22 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           <ClientNotesForm client={client} />
         </Card>
         <Card title="Espace voyageur">
-          <div className="space-y-2 px-5 py-4 text-sm text-stone-600">
+          <div className="space-y-3 px-5 py-4 text-sm text-stone-600">
             <p>
               {client.user_id
                 ? "Ce client a un accès : il voit ses dossiers, son programme et son carnet — jamais vos coûts ni vos marges."
-                : "Ce client n'a pas encore d'accès. Invitez-le depuis un dossier, avec l'adresse de son compte."}
+                : client.email
+                  ? "Ce client n'a pas encore d'accès. Envoyez-lui une invitation : il choisit son mot de passe et retrouve ses dossiers."
+                  : "Ce client n'a pas encore d'accès, et sa fiche n'a pas d'adresse e-mail : ajoutez-en une pour pouvoir l'inviter."}
             </p>
+
+            {!client.user_id && client.email && (
+              <form action={inviteClientAction}>
+                <input type="hidden" name="client_id" value={client.id} />
+                <SubmitButton pendingLabel="Envoi…">Inviter {client.name}</SubmitButton>
+              </form>
+            )}
+
             <p className="text-xs text-stone-500">
               Client depuis le {formatDate(client.created_at.slice(0, 10))}.
             </p>

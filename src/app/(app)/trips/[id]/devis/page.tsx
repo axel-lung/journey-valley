@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { Badge, Card, EmptyState } from "@/components/ui";
-import { getAgency, isAdvisor } from "@/lib/agency";
+import { getAgency, getClient, isAdvisor } from "@/lib/agency";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { checkCompliance } from "@/lib/legal";
@@ -42,6 +42,14 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
 
   const agency = getAgency(user.agency_id);
   const compliance = checkCompliance(agency);
+
+  // Envoyer un devis, c'est envoyer un message. Sans client rattaché ou sans
+  // adresse, l'envoi fige bien le devis mais rien ne part — et le conseiller
+  // doit l'apprendre avant de cliquer, pas en attendant une réponse qui ne
+  // viendra jamais.
+  const client =
+    trip.client_id && user.agency_id ? getClient(user.agency_id, trip.client_id) : null;
+  const reachable = Boolean(client?.email);
   const quotes = listQuotes(trip.id);
   const bookings = listBookings(trip.id);
   const currency = trip.currency;
@@ -65,6 +73,15 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="space-y-6">
+      {!reachable && (
+        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800 ring-1 ring-amber-200 ring-inset">
+          {client
+            ? `${client.name} n'a pas d'adresse e-mail sur sa fiche : envoyer un devis le figera, mais aucun message ne partira.`
+            : "Ce dossier n'est rattaché à aucun client : envoyer un devis le figera, mais aucun message ne partira."}{" "}
+          Vous pourrez toujours copier le lien public ci-dessous.
+        </p>
+      )}
+
       {!compliance.ready && (
         <Card title="Votre devis ne serait pas conforme" className="border-amber-300">
           <div className="space-y-3 px-5 py-4 text-sm">
@@ -177,9 +194,22 @@ export default async function QuotesPage({ params }: { params: Promise<{ id: str
                   </div>
 
                   {quote.status !== "draft" && (
-                    <p className="mt-2 truncate rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">
-                      Lien à envoyer : <span className="text-stone-700">/devis/{quote.token}</span>
-                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {/* Savoir si le client a ouvert le devis décide d'une
+                          relance : c'est la première chose qu'on demande. */}
+                      <p className="text-xs">
+                        {quote.opened_at ? (
+                          <span className="text-emerald-700">
+                            Ouvert par le client le {formatDate(quote.opened_at.slice(0, 10))}
+                          </span>
+                        ) : (
+                          <span className="text-stone-500">Pas encore ouvert par le client</span>
+                        )}
+                      </p>
+                      <p className="truncate rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500">
+                        Lien à envoyer : <span className="text-stone-700">/devis/{quote.token}</span>
+                      </p>
+                    </div>
                   )}
                 </li>
               );

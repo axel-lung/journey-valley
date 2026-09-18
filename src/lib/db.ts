@@ -238,6 +238,39 @@ export function migrate(db: Database.Database): void {
       expires_at TEXT NOT NULL
     );
 
+    -- La file d'envoi. Un message y est écrit avant de partir, et y reste
+    -- s'il ne part pas : sans serveur SMTP configuré, l'agence voit ce qui
+    -- aurait dû être envoyé et peut le copier, plutôt que de perdre le texte.
+    CREATE TABLE IF NOT EXISTS messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      agency_id  INTEGER REFERENCES agencies(id) ON DELETE CASCADE,
+      trip_id    INTEGER REFERENCES trips(id) ON DELETE SET NULL,
+      kind       TEXT NOT NULL CHECK (kind IN ('quote','invoice','reset','invite')),
+      to_name    TEXT NOT NULL DEFAULT '',
+      to_email   TEXT NOT NULL,
+      subject    TEXT NOT NULL,
+      body       TEXT NOT NULL,
+      link       TEXT NOT NULL DEFAULT '',
+      status     TEXT NOT NULL DEFAULT 'queued'
+                 CHECK (status IN ('queued','sent','failed')),
+      error      TEXT NOT NULL DEFAULT '',
+      sent_at    TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Les liens qui valent authentification sans compte ouvert : choisir un
+    -- mot de passe, ou ouvrir l'accès d'un client. Un jeton sert une fois et
+    -- expire ; c'est tout ce qui les protège.
+    CREATE TABLE IF NOT EXISTS access_tokens (
+      token      TEXT PRIMARY KEY,
+      kind       TEXT NOT NULL CHECK (kind IN ('reset','invite')),
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      client_id  INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      used_at    TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS activity_log (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       trip_id    INTEGER REFERENCES trips(id) ON DELETE CASCADE,
@@ -262,6 +295,9 @@ export function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_checklist_trip ON checklist_items(trip_id, position, id);
     CREATE INDEX IF NOT EXISTS idx_watches_trip ON price_watches(trip_id);
     CREATE INDEX IF NOT EXISTS idx_points_watch ON price_points(watch_id, checked_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_agency ON messages(agency_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_tokens_user ON access_tokens(user_id, kind);
   `);
 
   // Columns added after the first release. `CREATE TABLE IF NOT EXISTS` leaves
@@ -287,6 +323,11 @@ export function migrate(db: Database.Database): void {
   addColumn(db, "agencies", "liability_insurance", "TEXT NOT NULL DEFAULT ''");
   addColumn(db, "agencies", "mediator", "TEXT NOT NULL DEFAULT ''");
   addColumn(db, "agencies", "terms", "TEXT NOT NULL DEFAULT ''");
+
+  // Savoir si le client a ouvert le devis change la relance : c'est la
+  // première chose qu'un conseiller demande, et jusqu'ici on ne la savait pas.
+  addColumn(db, "quotes", "opened_at", "TEXT");
+  addColumn(db, "invoices", "opened_at", "TEXT");
 }
 
 /** Adds a column only when the table does not already have it. */

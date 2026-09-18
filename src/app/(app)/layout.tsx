@@ -4,6 +4,7 @@ import { Nav, type NavItem } from "@/components/nav";
 import { getAgency, isAdvisor } from "@/lib/agency";
 import { getCurrentUser } from "@/lib/auth";
 import { initials } from "@/lib/format";
+import { countQueued } from "@/lib/mail-store";
 import { PLANS } from "@/lib/plans";
 import { logoutAction } from "./actions";
 
@@ -23,6 +24,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/clients", label: "Clients", icon: "☺" },
         { href: "/trips", label: "Dossiers", icon: "✈" },
         { href: "/marges", label: "Marges", icon: "€" },
+        {
+          href: "/messages",
+          label: "Envois",
+          icon: "✉",
+          // Ce qui n'est pas parti se voit depuis n'importe quel écran : un
+          // devis qu'on croit envoyé et qui dort dans la file coûte une vente.
+          badge: user.agency_id ? countQueued(user.agency_id) : 0,
+        },
         { href: "/account", label: "Mon agence", icon: "⌂" },
       ]
     : [
