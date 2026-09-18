@@ -1,0 +1,45 @@
+# Journey Valley derrière un Traefik déjà en place.
+#
+# Pas de clé `version` : Compose v2 l'ignore et prévient qu'elle est obsolète.
+#
+# Avant le premier démarrage, le répertoire de données doit appartenir à
+# l'utilisateur du conteneur (uid 1000, `node`), sinon SQLite ne peut pas
+# écrire :
+#
+#   mkdir -p ./volumes/data && sudo chown -R 1000:1000 ./volumes/data
+
+services:
+  journey-valley:
+    build: .
+    image: journey-valley:latest
+    container_name: journey-valley
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.journey-valley.rule=Host(`${JV_DOMAIN}`)"
+      - "traefik.http.routers.journey-valley.entrypoints=websecure"
+      - "traefik.http.routers.journey-valley.tls=true"
+      - "traefik.http.routers.journey-valley.tls.certresolver=myresolver"
+      # Port interne de Next, jamais publié sur l'hôte : Traefik seul y accède.
+      - "traefik.http.services.journey-valley.loadbalancer.server.port=3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /data/journey-valley.db
+      # Sans ce secret, le balayage des alertes prix refuse de tourner.
+      WATCH_CRON_SECRET: ${WATCH_CRON_SECRET}
+      # Ce que les services libres voient ; leur usage veut une adresse de contact.
+      JV_USER_AGENT: ${JV_USER_AGENT:-JourneyValley/1.0 (+https://${JV_DOMAIN})}
+      # Recherche de vols réelle, facultative.
+      AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
+      AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
+      AMADEUS_ENV: ${AMADEUS_ENV:-test}
+    volumes:
+      # La base est la totalité des données : c'est ce répertoire qu'on sauvegarde.
+      - ./volumes/data:/data
+    restart: unless-stopped
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    name: traefik
+    external: true

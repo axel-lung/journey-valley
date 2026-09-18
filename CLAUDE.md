@@ -102,8 +102,10 @@ Mot de passe commun : `journey2026`.
   Java. En `http://`, le manifeste engendré autorise le clair — uniquement pour
   essayer sur un réseau privé.
 
-Déploiement : `DEPLOY.md` (VPS + Docker + Caddy). Le `Dockerfile` recompile
-better-sqlite3 dans la base de l'image finale ; la base vit sur un volume.
+Déploiement : `docker-compose.yml` derrière un Traefik existant (réseau externe
+`traefik`, resolver `myresolver`, rien de publié sur l'hôte), détaillé dans
+`DEPLOY.md`. Le `Dockerfile` recompile better-sqlite3 dans la base de l'image
+finale ; la base vit dans `./volumes/data`, qui doit appartenir à l'uid 1000.
 
 ## Ce qui reste ouvert
 

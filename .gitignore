@@ -20,3 +20,7 @@ mobile/dist/
 mobile/debug.keystore
 mobile/android/src/app/journeyvalley/Config.java
 mobile/android/AndroidManifest.xml
+
+# Déploiement
+volumes/
+.env.compose
