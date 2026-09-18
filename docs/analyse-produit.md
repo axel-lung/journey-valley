@@ -40,21 +40,22 @@ un lien public ; le conseiller doit copier le lien dans son propre client mail.
 - **Pas de journal d'envoi** — on ne sait pas si le devis a été ouvert. Le
   taux d'ouverture d'un devis est la métrique n°1 d'un conseiller.
 
-### 2. Facturation électronique (échéance réglementaire)
+### 2. Facturation électronique (échéance réglementaire) — en partie faite
 
 Depuis le **1er septembre 2026**, toute entreprise assujettie doit pouvoir
 **recevoir** ses factures via une PDP ; les PME devront **émettre** au format
-structuré au **1er septembre 2027**. Nos factures sont du HTML.
+structuré au **1er septembre 2027**.
 
-- Pas de **Factur-X** (PDF/A-3 + XML EN 16931), pas de sortie UBL/CII.
+- ~~Pas de **Factur-X** (XML EN 16931)~~ : le CII est produit (`facturx.ts`),
+  joint au PDF et téléchargeable seul. La subtilité métier est traitée — le XML
+  code le régime de la marge sans chiffrer la TVA, et déclare le prix total en
+  base, jamais la marge.
+- Le PDF n'est **pas encore un PDF/A-3** et ne le prétend pas : polices à
+  incorporer, profil colorimétrique de sortie, identification `pdfaid`.
+- Rien n'est validé contre un **vrai validateur** (Mustang, veraPDF) ni contre
+  la liste VATEX officielle : impossible depuis cette machine.
 - Pas de raccordement à une **PDP**, pas d'annuaire, pas de cycle de vie de
   facture (statuts normalisés), pas d'e-reporting.
-- Subtilité métier à traiter explicitement : sous le régime de la marge, le
-  XML ne doit pas porter de TVA déductible pour le client — la règle n°7 vaut
-  aussi dans le format structuré.
-
-C'est le seul manque avec une date légale dessus. À traiter en premier après
-le PDF.
 
 ### 3. Pas d'encaissement
 
@@ -268,7 +269,13 @@ des marges sans produire la pièce opposable. Le choix de cible et ce qu'il
    point de la vague 1 qui reste entier.
 
 **Vague 2 — ce qui tient le marché (≈ 2 trimestres)**
-6. Factur-X + raccordement PDP (échéance 2026 réception / 2027 émission).
+6. **Factur-X : le fichier est produit.** `facturx.ts` rend le
+   CrossIndustryInvoice EN 16931, profil BASIC, avec le régime de la marge
+   codé et non chiffré ; il est joint au PDF et se télécharge seul. Restent
+   trois choses : la **conformité PDF/A-3** (polices incorporées, profil
+   colorimétrique, `pdfaid`), la **validation** contre un vrai validateur
+   (Mustang, veraPDF) et la liste VATEX officielle, et le **raccordement à une
+   PDP**, qui est un contrat autant qu'un développement.
 7. Multi-devise sur les achats, prix par personne, remises et frais de dossier.
 8. Catalogue fournisseurs, bibliothèque de prestations, duplication de dossier,
    versions de devis.
