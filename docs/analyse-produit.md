@@ -249,12 +249,23 @@ des marges sans produire la pièce opposable. Le choix de cible et ce qu'il
 
 ## Dans quel ordre
 
-**Vague 1 — ce qui empêche de vendre (≈ 1 trimestre)**
-1. Génération PDF (devis, formulaire standardisé, facture, carnet).
-2. E-mail transactionnel + journal d'envoi et d'ouverture.
-3. Réinitialisation de mot de passe, invitation client en un clic.
-4. Téléversement de documents, restitués hors-ligne dans l'app.
-5. Réécrire `plans.ts` en offre agence et facturer l'abonnement.
+**Vague 1 — ce qui empêche de vendre — ✅ faite**
+1. ~~Génération PDF (devis, formulaire standardisé, facture, carnet).~~
+   `pdf.ts` + `documents.ts`, avec les tests qui relisent le texte du PDF pour
+   vérifier qu'aucun coût d'achat n'en sort.
+2. ~~E-mail transactionnel + journal d'envoi et d'ouverture.~~ `mail.ts`,
+   `smtp.ts`, `mail-store.ts` et l'écran **Envois** ; `opened_at` sur le devis
+   et la facture dit si le client a ouvert. Le dialogue SMTP n'est pas
+   testable ici : à vérifier contre un vrai serveur à la première mise en
+   service.
+3. ~~Réinitialisation de mot de passe, invitation client en un clic.~~
+4. ~~Téléversement de documents.~~ Déposés, visibles par rôle, téléchargeables.
+   Reste à faire pour la promesse complète : que le **téléphone les garde hors
+   ligne**, ce qui demande d'apprendre à la coque Java à enregistrer un
+   fichier.
+5. ~~Réécrire `plans.ts` en offre agence.~~ Essai à deux dossiers, forfait
+   Agence à 39 €/mois. **Rien ne facture encore l'abonnement** : c'est le seul
+   point de la vague 1 qui reste entier.
 
 **Vague 2 — ce qui tient le marché (≈ 2 trimestres)**
 6. Factur-X + raccordement PDP (échéance 2026 réception / 2027 émission).
